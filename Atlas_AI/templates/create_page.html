@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Create Page - AtlasAI{% endblock %}
+
+{% block content %}
+<div class="form-page">
+    <div class="form-container">
+        <div class="form-card">
+            <!-- Header -->
+            <div class="form-header">
+                <div class="form-header-content">
+                    <div class="form-icon">
+                        <i class="fas fa-plus"></i>
+                    </div>
+                    <div class="form-title-section">
+                        <h1 class="form-title">Create New Page</h1>
+                        <p class="form-subtitle">Add a new page to your knowledge base</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Form -->
+            <div class="form-body">
+                <form method="POST" class="form">
+                    <div class="form-group">
+                        <label for="title" class="form-label">
+                            Page Title <span class="required">*</span>
+                        </label>
+                        <input 
+                            type="text" 
+                            id="title" 
+                            name="title" 
+                            required
+                            class="form-input"
+                            placeholder="Enter a descriptive title..."
+                        >
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="parent_id" class="form-label">
+                            Parent Page <span class="optional">(Optional)</span>
+                        </label>
+                        <select 
+                            id="parent_id" 
+                            name="parent_id"
+                            class="form-select"
+                        >
+                            <option value="">No parent (root level)</option>
+                            {% for page in pages %}
+                                <option value="{{ page.id }}">{{ page.title }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="content" class="form-label">
+                            Content
+                        </label>
+                        <textarea 
+                            id="content" 
+                            name="content" 
+                            rows="15"
+                            class="form-textarea"
+                            placeholder="Write your content in Markdown...
+
+# Example Heading
+This is a paragraph with **bold** and *italic* text.
+
+## Features
+- Bullet point 1
+- Bullet point 2
+
+> This is a quote block
+
+```code
+This is a code block
+```"
+                        ></textarea>
+                        <p class="form-help">You can use Markdown formatting for rich content.</p>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i>
+                            <span>Cancel</span>
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i>
+                            <span>Create Page</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
