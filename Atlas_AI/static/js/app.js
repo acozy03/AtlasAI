@@ -1002,22 +1002,29 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    function handleRichEditorKeydown(e) {
+function handleRichEditorKeydown(e) {
       // Handle Enter key for better formatting
       if (e.key === "Enter") {
         hasUnsavedChanges = true
 
-        // If we're in a heading, create a new paragraph
         const selection = window.getSelection()
         if (selection.rangeCount > 0) {
-          let element = selection.anchorNode
+          const range = selection.getRangeAt(0)
+          let element = range.commonAncestorContainer
           if (element.nodeType === Node.TEXT_NODE) {
             element = element.parentElement
           }
 
+          // If we're in a heading, create a new paragraph
           if (element.tagName && /^H[1-6]$/.test(element.tagName)) {
-            e.preventDefault()
-            document.execCommand("formatBlock", false, "p")
+            // Check if the cursor is at the very end of the heading.
+            // This prevents unexpected behavior if Enter is pressed in the middle of a heading.
+            if (range.collapsed && range.atEndOf(element)) {
+                e.preventDefault();
+                // Use insertParagraph to create a new <p> element after the heading.
+                // This is the most semantically correct way and avoids extraneous <br> tags.
+                document.execCommand('insertParagraph');
+            }
           }
         }
       }
@@ -1453,57 +1460,57 @@ document.addEventListener("DOMContentLoaded", () => {
     return html
   }
 
-  // Collapsible sections functionality
+  // // Collapsible sections functionality
   function setupCollapsibleSections() {
-    const pageContent = document.getElementById("pageContent")
-    if (!pageContent) return
+  //   const pageContent = document.getElementById("pageContent")
+  //   if (!pageContent) return
 
-    // Find all headers and make them collapsible
-    const headers = pageContent.querySelectorAll("h1, h2, h3, h4, h5, h6")
+  //   // Find all headers and make them collapsible
+  //   const headers = pageContent.querySelectorAll("h1, h2, h3, h4, h5, h6")
 
-    headers.forEach((header, index) => {
-      // Skip if already has toggle button
-      if (header.querySelector(".section-toggle")) return
+  //   headers.forEach((header, index) => {
+  //     // Skip if already has toggle button
+  //     if (header.querySelector(".section-toggle")) return
 
-      // Create toggle button
-      const toggleBtn = document.createElement("button")
-      toggleBtn.className = "section-toggle"
-      toggleBtn.innerHTML = '<i class="fas fa-chevron-down"></i>'
-      toggleBtn.setAttribute("aria-expanded", "true")
+  //     // Create toggle button
+  //     const toggleBtn = document.createElement("button")
+  //     toggleBtn.className = "section-toggle"
+  //     toggleBtn.innerHTML = '<i class="fas fa-chevron-down"></i>'
+  //     toggleBtn.setAttribute("aria-expanded", "true")
 
-      // Add click handler
-      toggleBtn.addEventListener("click", (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        toggleSection(header, toggleBtn)
-      })
+  //     // Add click handler
+  //     toggleBtn.addEventListener("click", (e) => {
+  //       e.preventDefault()
+  //       e.stopPropagation()
+  //       toggleSection(header, toggleBtn)
+  //     })
 
-      // Insert toggle button at the beginning of the header
-      header.insertBefore(toggleBtn, header.firstChild)
+  //     // Insert toggle button at the beginning of the header
+  //     header.insertBefore(toggleBtn, header.firstChild)
 
-      // Wrap content between this header and the next header (or end)
-      const nextHeader = findNextHeader(header)
-      const sectionContent = document.createElement("div")
-      sectionContent.className = "section-content expanded"
+  //     // Wrap content between this header and the next header (or end)
+  //     const nextHeader = findNextHeader(header)
+  //     const sectionContent = document.createElement("div")
+  //     sectionContent.className = "section-content expanded"
 
-      let currentElement = header.nextElementSibling
-      const elementsToMove = []
+  //     let currentElement = header.nextElementSibling
+  //     const elementsToMove = []
 
-      while (currentElement && currentElement !== nextHeader) {
-        elementsToMove.push(currentElement)
-        currentElement = currentElement.nextElementSibling
-      }
+  //     while (currentElement && currentElement !== nextHeader) {
+  //       elementsToMove.push(currentElement)
+  //       currentElement = currentElement.nextElementSibling
+  //     }
 
-      // Move elements into section content
-      elementsToMove.forEach((el) => {
-        sectionContent.appendChild(el)
-      })
+  //     // Move elements into section content
+  //     elementsToMove.forEach((el) => {
+  //       sectionContent.appendChild(el)
+  //     })
 
-      // Insert section content after header
-      if (elementsToMove.length > 0) {
-        header.parentNode.insertBefore(sectionContent, header.nextSibling)
-      }
-    })
+  //     // Insert section content after header
+  //     if (elementsToMove.length > 0) {
+  //       header.parentNode.insertBefore(sectionContent, header.nextSibling)
+  //     }
+  //   })
   }
 
   function findNextHeader(currentHeader) {
