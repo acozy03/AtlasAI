@@ -75,8 +75,18 @@
     <div class="main-wrapper">
         {% block content %}{% endblock %}
     </div>
+<!-- Updated base template with all module scripts -->
+<script src="{{ url_for('static', filename='js/core.js') }}"></script>
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+<script src="{{ url_for('static', filename='js/editing.js') }}"></script>
+<script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+<script src="{{ url_for('static', filename='js/sidebar.js') }}"></script>
+<script src="{{ url_for('static', filename='js/search.js') }}"></script>
+<script src="{{ url_for('static', filename='js/modals.js') }}"></script>
+<script src="{{ url_for('static', filename='js/collapsible.js') }}"></script>
 
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
     {% block scripts %}{% endblock %}
 </body>
 </html>
