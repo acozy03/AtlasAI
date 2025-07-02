@@ -1,9 +1,9 @@
 // Core initialization and utilities
 document.addEventListener("DOMContentLoaded", () => {
-  // Import necessary libraries
-  window.marked = window.marked
-  window.TurndownService = window.TurndownService
-  window.Quill = window.Quill
+  // Import necessary libraries (ensure they are loaded before use)
+  // window.marked = window.marked // If marked is loaded as a global script, no need to reassign
+  // window.TurndownService = window.TurndownService
+  // window.Quill = window.Quill
 
   // Global state
   window.AtlasAI = {
@@ -16,6 +16,24 @@ document.addEventListener("DOMContentLoaded", () => {
     sidebarOpen: true,
     chatOpen: false,
     isMobile: window.innerWidth < 768,
+    // Centralized function to close all panels
+    closeAllPanels: () => {
+      console.log("closeAllPanels called");
+      if (window.AtlasAI.sidebarOpen && window.AtlasAI.isMobile && window.toggleSidebar) {
+        window.toggleSidebar(); // Assumes toggleSidebar closes if open
+      }
+      if (window.AtlasAI.chatOpen && window.closeChat) {
+        window.closeChat();
+      }
+      // Close all page menus
+      document.querySelectorAll(".page-menu.show").forEach((m) => m.classList.remove("show"));
+      // Close all link modals
+      document.querySelectorAll(".link-modal").forEach((m) => m.remove());
+      // Close all color picker modals
+      document.querySelectorAll(".color-picker-modal").forEach((m) => m.remove());
+      // Close any other open modals (e.g., create page modal)
+      document.querySelectorAll(".modal-overlay:not(.link-modal):not(.color-picker-modal)").forEach((m) => m.remove());
+    }
   }
 
   // Initialize all modules
@@ -45,6 +63,28 @@ document.addEventListener("DOMContentLoaded", () => {
         setTimeout(() => msg.remove(), 300)
       })
     }, 5000)
+
+    // Global keyboard shortcuts (using the centralized closeAllPanels)
+    document.addEventListener("keydown", (e) => {
+      // Ctrl/Cmd + K to focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault()
+        document.getElementById("globalSearch")?.focus()
+      }
+
+      // Ctrl/Cmd + / to toggle chat
+      if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+        e.preventDefault()
+        if (window.toggleChat) window.toggleChat()
+      }
+
+      // Escape to close panels
+      if (e.key === "Escape") {
+        if (window.AtlasAI && window.AtlasAI.closeAllPanels) {
+          window.AtlasAI.closeAllPanels();
+        }
+      }
+    })
 
     console.log("AtlasAI initialized successfully!")
   }
@@ -131,26 +171,6 @@ document.addEventListener("DOMContentLoaded", () => {
       })
     }
   }
-
-  // Global keyboard shortcuts
-  document.addEventListener("keydown", (e) => {
-    // Ctrl/Cmd + K to focus search
-    if ((e.ctrlKey || e.metaKey) && e.key === "k") {
-      e.preventDefault()
-      document.getElementById("globalSearch")?.focus()
-    }
-
-    // Ctrl/Cmd + / to toggle chat
-    if ((e.ctrlKey || e.metaKey) && e.key === "/") {
-      e.preventDefault()
-      if (window.toggleChat) window.toggleChat()
-    }
-
-    // Escape to close panels
-    if (e.key === "Escape") {
-      if (window.closeAllPanels) window.closeAllPanels()
-    }
-  })
 
   // Window resize handler
   window.addEventListener("resize", () => {

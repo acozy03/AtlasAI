@@ -79,7 +79,8 @@ window.initEditing = () => {
           !e.target.closest("#pageContent") &&
           !e.target.closest(".rich-editor-toolbar") &&
           !e.target.closest("#pageTitle") &&
-          !e.target.closest(".link-modal")
+          !e.target.closest(".link-modal") &&
+          !e.target.closest(".color-picker-modal") // Added to ignore color picker
         ) {
           console.log("Clicked outside, saving...")
           if (window.AtlasAI.hasUnsavedChanges) {
@@ -287,6 +288,9 @@ window.initEditing = () => {
         <button type="button" class="toolbar-btn" data-command="link" title="Add Link">
           <i class="fas fa-link"></i>
         </button>
+        <button type="button" class="toolbar-btn" data-command="foreColor" title="Font Color">
+          <i class="fas fa-palette"></i>
+        </button>
       </div>
       
       <div class="toolbar-separator"></div>
@@ -346,6 +350,9 @@ window.initEditing = () => {
         break
       case "link":
         showLinkModal()
+        break
+      case "foreColor":
+        showColorPicker()
         break
       case "save":
         window.savePageChanges()
@@ -453,6 +460,62 @@ window.initEditing = () => {
     }
   }
 
+  // NEW: Function to show color picker
+  function showColorPicker() {
+    const toolbar = window.AtlasAI.richEditor.toolbar
+    const colorButton = toolbar.querySelector('[data-command="foreColor"]')
+    const rect = colorButton.getBoundingClientRect()
+
+    const modal = document.createElement("div")
+    modal.className = "modal-overlay color-picker-modal"
+    modal.style.position = "absolute"; // Make it absolute for positioning relative to the button
+    modal.style.top = `${rect.bottom + window.scrollY + 5}px`; // Position below the button
+    modal.style.left = `${rect.left + window.scrollX}px`;
+    modal.style.background = "var(--bg-secondary)";
+    modal.style.border = "1px solid var(--border-primary)";
+    modal.style.borderRadius = "0.5rem";
+    modal.style.boxShadow = "0 5px 15px rgba(0,0,0,0.3)";
+    modal.style.padding = "1rem";
+    modal.style.maxWidth = "200px";
+    modal.style.zIndex = "101"; // Higher than other modals
+
+    modal.innerHTML = `
+      <div class="form-group">
+        <label for="colorInput" style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 0.5rem; display: block;">Select Color</label>
+        <input type="color" id="colorInput" value="#3b82f6" style="width: 100%; height: 40px; border: none; padding: 0; background: none;">
+      </div>
+      <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+        <button type="button" class="btn btn-secondary" id="cancelColor">Cancel</button>
+        <button type="button" class="btn btn-primary" id="applyColor">Apply</button>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelector("#applyColor").addEventListener("click", () => {
+        const color = modal.querySelector("#colorInput").value;
+        document.execCommand('foreColor', false, color);
+        window.AtlasAI.hasUnsavedChanges = true;
+        modal.remove();
+        pageContent?.focus();
+        updateToolbarState();
+    });
+
+    modal.querySelector("#cancelColor").addEventListener("click", () => {
+        modal.remove();
+        pageContent?.focus();
+    });
+
+    // Close on click outside the modal itself (but not the toolbar button that opened it)
+    document.addEventListener("click", function closeColorPickerOnOutsideClick(event) {
+        if (!modal.contains(event.target) && !colorButton.contains(event.target)) {
+            modal.remove();
+            document.removeEventListener("click", closeColorPickerOnOutsideClick);
+        }
+    });
+  }
+
+
   function updateToolbarState() {
     if (!window.AtlasAI.richEditor) return
 
@@ -515,9 +578,38 @@ window.initEditing = () => {
   }
 
   function handleRichEditorKeydown(e) {
-    if (e.key === "Enter") {
-      window.AtlasAI.hasUnsavedChanges = true
+    window.AtlasAI.hasUnsavedChanges = true; // Any keydown implies changes
 
+    // NEW: Automatic bullet point on '-' followed by space
+    if (e.key === ' ' && e.target === pageContent) {
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            const textBeforeCursor = range.startContainer.textContent.substring(0, range.startOffset);
+
+            // Check if it's the start of a line and the last non-whitespace characters are '-'
+            // This is a simple check, more robust parsing for indentation might be needed for perfect nested list creation.
+            const lineStartMatch = textBeforeCursor.match(/(\s*)-$/);
+            
+            if (lineStartMatch) {
+                // Prevent the space from being typed
+                e.preventDefault();
+
+                // Remove the '-'
+                const startOfLine = range.startOffset - (lineStartMatch[0].length);
+                range.setStart(range.startContainer, startOfLine);
+                range.deleteContents();
+
+                // Insert a list item
+                document.execCommand('insertUnorderedList');
+                
+                window.AtlasAI.hasUnsavedChanges = true;
+                return; // Stop further processing to avoid default space insertion
+            }
+        }
+    }
+
+    if (e.key === "Enter") {
       const selection = window.getSelection()
       if (selection.rangeCount > 0) {
         const range = selection.getRangeAt(0)

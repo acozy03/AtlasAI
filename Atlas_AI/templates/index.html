@@ -2,10 +2,8 @@
 
 {% block content %}
 <div class="app-layout">
-    <!-- Sidebar -->
     <aside id="sidebar" class="sidebar">
         <div class="sidebar-content">
-            <!-- Search -->
             <div class="sidebar-header">
                 <div class="search-container">
                     <i class="fas fa-search search-icon"></i>
@@ -18,45 +16,44 @@
                 </div>
             </div>
             
-            <!-- Page Tree -->
             <div class="sidebar-body">
                 <div class="page-tree">
-                    {% for page in pages %}
-                        {% if not page.parent_id %}
-                            <div class="page-item">
-                                <a href="{{ url_for('wiki_page', slug=page.slug) }}" 
-                                   class="page-link {% if current_page and current_page.id == page.id %}active{% endif %}">
-                                    <i class="fas fa-file-text"></i>
+                    {# Macro to render page and its children recursively #}
+                    {% macro render_page_item(page, current_page, level=0) %}
+                        <div class="page-item {% if level > 0 %}child-level-{{ level }}{% endif %}">
+                            <a href="{{ url_for('wiki_page', slug=page.slug) }}" 
+                               class="page-link {% if current_page and current_page.id == page.id %}active{% endif %}">
+                                {# The toggle button will be injected here by JavaScript #}
+                                <div class="page-link-content"> {# New wrapper for text and icon #}
+                                    {# Removed the page icon here #}
                                     <span>{{ page.title }}</span>
-                                </a>
-                                {% set children = pages | selectattr('parent_id', 'equalto', page.id) | list %}
-                                {% if children %}
-                                    <div class="page-children">
-                                        {% for child in children %}
-                                            <a href="{{ url_for('wiki_page', slug=child.slug) }}" 
-                                               class="page-link child {% if current_page and current_page.id == child.id %}active{% endif %}">
-                                                <i class="fas fa-file"></i>
-                                                <span>{{ child.title }}</span>
-                                            </a>
-                                        {% endfor %}
-                                    </div>
-                                {% endif %}
-                            </div>
-                        {% endif %}
+                                </div>
+                                {# Page menu for actions (will be populated by JS) #}
+                            </a>
+                            
+                            {% if page.children %}
+                                <div class="page-children expanded"> {# 'expanded' class will be managed by JS based on current page #}
+                                    {% for child in page.children %}
+                                        {{ render_page_item(child, current_page, level + 1) }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endmacro %}
+
+                    {% for page in pages %}
+                        {{ render_page_item(page, current_page) }}
                     {% endfor %}
                 </div>
             </div>
         </div>
     </aside>
 
-    <!-- Main Content -->
     <main id="mainContent" class="main-content">
         {% if current_page %}
             <div class="content-container">
-                <!-- Page Header -->
                 <div class="page-header">
                     <div class="page-info">
-                        <!-- Editable Title -->
                         <div class="title-container">
                             <h1 id="pageTitle" class="page-title" contenteditable="false">{{ current_page.title }}</h1>
                         </div>
@@ -73,9 +70,7 @@
                     </div>
                 </div>
                 
-                <!-- Page Content -->
                 <div class="page-content">
-                    <!-- Editable Content -->
                     <div id="pageContent" class="content" data-original-content="{{ current_page.content }}">{{ current_page.content | replace('\n', '<br>') | safe }}</div>
                 </div>
             </div>
@@ -98,10 +93,8 @@
         {% endif %}
     </main>
 
-    <!-- Chat Assistant -->
     <aside id="chatPanel" class="chat-panel">
         <div class="chat-container">
-            <!-- Chat Header -->
             <div class="chat-header">
                 <div class="chat-title">
                     <div class="chat-icon">
@@ -114,7 +107,6 @@
                 </button>
             </div>
             
-            <!-- Chat Messages -->
             <div id="chatMessages" class="chat-messages">
                 <div class="welcome-message">
                     <div class="bot-avatar">
@@ -127,7 +119,6 @@
                 </div>
             </div>
             
-            <!-- Chat Input -->
             <div class="chat-input-container">
                 <form id="chatForm">
                     <div class="chat-input-wrapper">
@@ -147,7 +138,6 @@
     </aside>
 </div>
 
-<!-- Overlay for mobile -->
 <div id="overlay" class="overlay"></div>
 {% endblock %}
 

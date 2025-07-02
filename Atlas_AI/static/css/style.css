@@ -342,6 +342,7 @@ body {
 }
 
 .flash-close:hover {
+  background: rgba(75, 85, 99, 0.3);
   color: var(--text-primary);
 }
 
@@ -378,6 +379,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow: visible; /* Changed from hidden/auto */
 }
 
 .sidebar-header {
@@ -419,6 +421,7 @@ body {
   transform: translateY(-50%);
   color: var(--text-muted);
   font-size: 0.875rem;
+  pointer-events: none;
 }
 
 .search-input {
@@ -444,6 +447,7 @@ body {
 .sidebar-body {
   flex: 1;
   overflow-y: auto;
+  overflow-x: visible; /* Allow horizontal overflow for menus */
   padding: 1rem;
 }
 
@@ -451,30 +455,35 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  overflow: visible; /* Allow menus to overflow */
 }
 
+/* Page item and link positioning */
 .page-item {
-  display: flex;
-  flex-direction: column;
-  position: relative;
+  pointer-events: auto;
 }
 
+.page-item * {
+  pointer-events: auto;
+}
+
+.sidebar-body.menu-open .page-item:not(.menu-active-item) {
+  pointer-events: none;
+}
+
+.sidebar-body.menu-open .page-item.menu-active-item {
+  pointer-events: auto;
+} 
 /* Animated page children with smooth transitions */
 .page-children {
-  margin-left: 1.5rem;
   margin-top: 0.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  overflow: hidden;
+  overflow: visible; /* Allow child menus to overflow */
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.page-children.expanded {
-  opacity: 1;
-  max-height: 500px;
-  transform: translateY(0);
-}
 
 .page-children.collapsed {
   opacity: 0;
@@ -497,7 +506,8 @@ body {
   justify-content: center;
   width: 1.5rem;
   height: 1.5rem;
-  margin-left: auto;
+  /* Removed margin-left: auto; as it's now first child of page-link-content */
+  flex-shrink: 0; /* Prevent it from shrinking */
 }
 
 .page-toggle:hover {
@@ -520,6 +530,7 @@ body {
   transform: rotate(0deg);
 }
 
+
 /* Page menu button */
 .page-menu-btn {
   background: none;
@@ -535,7 +546,8 @@ body {
   width: 1.5rem;
   height: 1.5rem;
   opacity: 0;
-  margin-left: 0.25rem;
+  margin-left: auto; /* Push to the right */
+  flex-shrink: 0;
 }
 
 .page-item:hover .page-menu-btn {
@@ -560,20 +572,31 @@ body {
   border: 1px solid var(--border-primary);
   border-radius: 0.5rem;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-  z-index: 100;
-  min-width: 160px;
+  z-index: 1001;
+  min-width: 180px;
   opacity: 0;
   visibility: hidden;
   transform: translateY(-10px);
   transition: all 0.2s ease;
+  white-space: nowrap;
+  overflow: visible;
+  
+  /* Critical: Ensure menu captures pointer events */
+  pointer-events: auto;
 }
 
 .page-menu.show {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
+  pointer-events: auto; /* Ensure it can receive clicks */
 }
 
+.page-menu:not(.show) {
+  pointer-events: none;
+}
+
+/* Ensure menu items are clickable */
 .menu-item {
   display: flex;
   align-items: center;
@@ -587,11 +610,22 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   font-size: 0.875rem;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-secondary);
+  
+  /* Ensure menu items capture clicks */
+  pointer-events: auto;
+  position: relative;
+  z-index: 1002; /* Higher than menu container */
 }
 
 .menu-item:hover {
   background: rgba(75, 85, 99, 0.3);
   color: var(--text-primary);
+}
+
+.menu-item:last-child {
+  border-bottom: none;
 }
 
 .menu-item.delete {
@@ -611,15 +645,37 @@ body {
 .page-link {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
   padding: 0.625rem 0.75rem;
   color: var(--text-secondary);
   text-decoration: none;
   border-radius: 0.5rem;
   transition: all 0.2s ease;
   position: relative;
+  z-index: 2;
   width: 100%;
+  min-height: 2.5rem;
+  justify-content: space-between;
+  overflow: visible; /* Allow menu to overflow */
 }
+
+.page-link-content { /* New class to wrap icon and text */
+    display: flex; /* <<<<<<<<<<<<<<<< ADDED: Ensure it's a flex container for horizontal alignment */
+    align-items: center;
+    gap: 0.75rem; /* Gap for toggle, icon, and text */
+    flex-grow: 1; /* Allow content to grow and push menu button */
+    /* REMOVED overflow: hidden; from here */
+    white-space: nowrap; /* Keep text on one line */
+    text-overflow: ellipsis; /* Add ellipsis for overflowed text */
+    min-width: 0; /* Allow content to shrink */
+}
+
+/* Add text overflow clipping specifically to the span if it overflows */
+.page-link-content span {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
 
 .page-link:hover {
   background: rgba(75, 85, 99, 0.3);
@@ -632,19 +688,55 @@ body {
   border-right: 2px solid var(--accent-blue);
 }
 
-.page-link i {
-  color: var(--text-muted);
-  font-size: 0.875rem;
+.page-link.menu-active {
+  z-index: 1000;
+  /* Create a stronger stacking context */
+  isolation: isolate;
 }
 
-.page-link.active i {
+/* Prevent underlying elements from interfering when menu is open */
+.page-item:has(.page-menu.show) ~ .page-item {
+  pointer-events: none; /* Disable clicks on siblings below */
+}
+
+.page-item:has(.page-menu.show) ~ .page-item * {
+  pointer-events: none; /* Disable clicks on all child elements */
+}
+
+.page-link .page-link-content i { /* Target icon inside new wrapper */
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  /* Add explicit alignment if needed, e.g., vertical-align: middle; */
+}
+
+.page-link.active .page-link-content i { /* Target icon inside new wrapper */
   color: #60a5fa;
 }
 
-.page-link.child {
+.page-link.child { /* This class is now redundant as indentation is handled by child-level-X */
   font-size: 0.875rem;
   color: var(--text-tertiary);
 }
+
+/* Styles for nested page items in sidebar */
+/* These indents are for the page-link itself, to push it right */
+.page-item.child-level-1 > .page-link {
+    padding-left: 1.5rem; /* Base padding of 0.75rem + 0.75rem indent */
+}
+
+.page-item.child-level-2 > .page-link {
+    padding-left: 2.25rem; /* 0.75 + 2 * 0.75 */
+}
+
+.page-item.child-level-3 > .page-link {
+    padding-left: 3rem; /* 0.75 + 3 * 0.75 */
+}
+
+.page-item.child-level-4 > .page-link {
+    padding-left: 3.75rem; /* 0.75 + 4 * 0.75 */
+}
+/* You can add more .child-level-X as needed */
+
 
 /* Main Content */
 .main-content {
@@ -1023,7 +1115,7 @@ body {
 .welcome-text {
   color: var(--text-tertiary);
   margin-bottom: 2rem;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 /* Modal Styles */
@@ -1586,4 +1678,43 @@ body {
 
 .save-status.error {
   color: var(--accent-red);
+}
+
+/* Styles for color picker modal */
+.color-picker-modal .modal-content {
+    max-width: 250px; /* Smaller size for color picker */
+    padding: 1rem;
+}
+
+.color-picker-modal label {
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.color-picker-modal input[type="color"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 40px;
+    border: 1px solid var(--border-secondary);
+    border-radius: 0.5rem;
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    padding: 0; /* Remove default padding */
+    overflow: hidden; /* Hide default color swatch border */
+}
+
+.color-picker-modal input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.color-picker-modal input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 0.5rem;
+}
+
+.color-picker-modal input[type="color"]::-moz-color-sample {
+    border: none;
+    border-radius: 0.5rem;
 }

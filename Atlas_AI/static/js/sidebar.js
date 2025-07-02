@@ -7,7 +7,7 @@ window.initSidebar = () => {
 
   setupSidebarEventListeners()
   setupSidebarMenus()
-  setupSidebarCollapse()
+  setupSidebarCollapse() 
   setupResponsive()
 
   function setupSidebarEventListeners() {
@@ -19,9 +19,13 @@ window.initSidebar = () => {
       })
     }
 
-    // Overlay click
+    // Overlay click (will call AtlasAI.closeAllPanels which is defined in core.js)
     if (overlay) {
-      overlay.addEventListener("click", closeAllPanels)
+      overlay.addEventListener("click", () => {
+        if (window.AtlasAI && window.AtlasAI.closeAllPanels) {
+          window.AtlasAI.closeAllPanels();
+        }
+      });
     }
 
     // Intercept page navigation to save changes
@@ -30,13 +34,19 @@ window.initSidebar = () => {
 
   function handlePageNavigation(e) {
     const pageLink = e.target.closest(".page-link")
-    if (pageLink && window.AtlasAI.isEditing && window.AtlasAI.hasUnsavedChanges) {
+    // Check if the click is on a page link and if there are unsaved changes and not currently saving
+    // Also, explicitly check if the click target is NOT one of our interactive buttons
+    const isMenuButton = e.target.closest(".page-menu-btn");
+    const isToggleCollapsedButton = e.target.closest(".page-toggle");
+    
+    if (pageLink && !isMenuButton && !isToggleCollapsedButton && window.AtlasAI.isEditing && window.AtlasAI.hasUnsavedChanges) {
       e.preventDefault()
 
       // Save changes first, then navigate
       window
         .savePageChanges()
         .then(() => {
+          // Only navigate if save was successful
           window.location.href = pageLink.href
         })
         .catch(() => {
@@ -51,10 +61,16 @@ window.initSidebar = () => {
   function setupResponsive() {
     window.AtlasAI.isMobile = window.innerWidth < 768
 
+    // If switching to mobile, ensure sidebar is collapsed
     if (window.AtlasAI.isMobile) {
       window.AtlasAI.sidebarOpen = false
       sidebar?.classList.add("collapsed")
       mainContent?.classList.add("expanded")
+    } else {
+      // If switching to desktop, ensure sidebar is open by default
+      window.AtlasAI.sidebarOpen = true;
+      sidebar?.classList.remove("collapsed");
+      mainContent?.classList.remove("expanded");
     }
   }
 
@@ -91,12 +107,10 @@ window.initSidebar = () => {
     console.log("Sidebar toggled, new state:", window.AtlasAI.sidebarOpen)
   }
 
-  function closeAllPanels() {
+  // Renamed to ensure core.js manages the global AtlasAI.closeAllPanels
+  function closeSidebarOnly() {
     if (window.AtlasAI.sidebarOpen && window.AtlasAI.isMobile) {
       toggleSidebar()
-    }
-    if (window.AtlasAI.chatOpen && window.closeChat) {
-      window.closeChat()
     }
   }
 
@@ -109,15 +123,26 @@ window.initSidebar = () => {
       createBtn.className = "create-page-btn"
       createBtn.innerHTML = '<i class="fas fa-plus"></i>'
       createBtn.title = "Create new page"
-      createBtn.addEventListener("click", () => {
-        if (window.showCreatePageModal) window.showCreatePageModal()
+      createBtn.addEventListener("click", (e) => {
+        e.preventDefault(); // Prevent any default button action
+        e.stopPropagation(); // Prevent propagation that might instantly close the modal
+        // Use a global event to trigger the modal, so modal.js can handle it
+        document.dispatchEvent(new CustomEvent('showCreatePageModalFromSidebar'));
       })
 
       sidebarHeader.appendChild(createBtn)
     }
 
+    // This global function allows the welcome screen button to open the modal
+    window.showCreatePageModalFromSidebar = (parentId = null, parentTitle = null) => {
+        if (window.showCreatePageModal) {
+            window.showCreatePageModal(parentId, parentTitle);
+        }
+    };
+
+
     document.querySelectorAll(".page-item").forEach((pageItem) => {
-      const pageLink = pageItem.querySelector(".page-link:not(.child)")
+      const pageLink = pageItem.querySelector(".page-link") 
       if (!pageLink) return
 
       // Create menu button
@@ -131,42 +156,138 @@ window.initSidebar = () => {
       menu.className = "page-menu"
 
       const pageSlug = pageLink.href.split("/").pop()
-      const pageTitle = pageLink.querySelector("span").textContent
+      // Get page title from the span inside page-link-content
+      const pageTitle = pageLink.querySelector(".page-link-content span") ? pageLink.querySelector(".page-link-content span").textContent : '';
+
 
       menu.innerHTML = `
-        <button class="menu-item" onclick="addChildPage('${pageSlug}', '${pageTitle}')">
+        <button class="menu-item" data-action="addChildPage">
           <i class="fas fa-plus"></i>
           <span>Add child page</span>
         </button>
-        <button class="menu-item delete" onclick="deletePage('${pageSlug}')">
+        <button class="menu-item delete" data-action="deletePage">
           <i class="fas fa-trash"></i>
           <span>Delete page</span>
         </button>
       `
-
-      // Add menu to page item
+      // Append menu button and menu to pageLink
       pageLink.appendChild(menuBtn)
-      pageItem.appendChild(menu)
+      pageLink.appendChild(menu) // Ensure menu is child of pageLink for positioning
 
-      // Toggle menu on button click
-      menuBtn.addEventListener("click", (e) => {
-        e.preventDefault()
-        e.stopPropagation()
 
-        // Close other menus
-        document.querySelectorAll(".page-menu.show").forEach((m) => {
-          if (m !== menu) m.classList.remove("show")
-        })
+// Enhanced menu management with pointer-events control
+menuBtn.addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
 
-        menu.classList.toggle("show")
-      })
+  const sidebarBody = document.querySelector('.sidebar-body');
+  
+  // Close other menus and clean up
+  document.querySelectorAll(".page-link").forEach((link) => {
+    const otherMenu = link.querySelector(".page-menu");
+    const otherPageItem = link.closest('.page-item');
+    
+    if (otherMenu && otherMenu !== menu) {
+      otherMenu.classList.remove("show");
+      link.classList.remove("menu-active");
+      if (otherPageItem) {
+        otherPageItem.classList.remove("menu-active-item");
+      }
+    }
+  });
 
-      // Close menu when clicking outside
-      document.addEventListener("click", (e) => {
-        if (!pageItem.contains(e.target)) {
-          menu.classList.remove("show")
-        }
-      })
+  // Toggle current menu
+  const isShowing = menu.classList.toggle("show");
+  const currentPageItem = pageLink.closest('.page-item');
+  
+  if (isShowing) {
+    pageLink.classList.add('menu-active');
+    if (currentPageItem) {
+      currentPageItem.classList.add('menu-active-item');
+    }
+    if (sidebarBody) {
+      sidebarBody.classList.add('menu-open');
+    }
+    
+    // Force menu to be on top
+    menu.style.zIndex = '1001';
+    
+    // Position adjustment logic
+    setTimeout(() => {
+      const rect = menu.getBoundingClientRect();
+      const sidebarRect = document.querySelector('.sidebar').getBoundingClientRect();
+      
+      if (rect.right > sidebarRect.right) {
+        menu.style.right = '0';
+        menu.style.left = 'auto';
+      }
+      
+      if (rect.bottom > window.innerHeight) {
+        menu.style.top = 'auto';
+        menu.style.bottom = '100%';
+      }
+    }, 0);
+    
+  } else {
+    pageLink.classList.remove('menu-active');
+    if (currentPageItem) {
+      currentPageItem.classList.remove('menu-active-item');
+    }
+    if (sidebarBody) {
+      sidebarBody.classList.remove('menu-open');
+    }
+    
+    // Reset positioning
+    menu.style.top = '';
+    menu.style.bottom = '';
+    menu.style.right = '';
+    menu.style.left = '';
+    menu.style.zIndex = '';
+  }
+});
+
+// Enhanced click outside handler
+document.addEventListener("click", (e) => {
+  if (!pageLink.contains(e.target)) {
+    const sidebarBody = document.querySelector('.sidebar-body');
+    const currentPageItem = pageLink.closest('.page-item');
+    
+    menu.classList.remove("show");
+    pageLink.classList.remove('menu-active');
+    
+    if (currentPageItem) {
+      currentPageItem.classList.remove('menu-active-item');
+    }
+    if (sidebarBody) {
+      sidebarBody.classList.remove('menu-open');
+    }
+    
+    // Reset positioning
+    menu.style.top = '';
+    menu.style.bottom = '';
+    menu.style.right = '';
+    menu.style.left = '';
+    menu.style.zIndex = '';
+  }
+});
+
+// Ensure menu items are properly clickable
+menu.querySelectorAll(".menu-item").forEach(item => {
+  item.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Force the click to be processed
+    setTimeout(() => {
+      const action = item.dataset.action;
+      if (action === "addChildPage") {
+        window.addChildPage(pageSlug, pageTitle);
+      } else if (action === "deletePage") {
+        window.deletePage(pageSlug);
+      }
+    }, 0);
+  });
+});
     })
   }
 
@@ -174,50 +295,69 @@ window.initSidebar = () => {
   function setupSidebarCollapse() {
     // Add click handlers to parent page links that have children
     document.querySelectorAll(".page-item").forEach((pageItem) => {
-      const pageLink = pageItem.querySelector(".page-link:not(.child)")
-      const children = pageItem.querySelector(".page-children")
+      const pageLink = pageItem.querySelector(".page-link") // Select the link
+      const childrenContainer = pageItem.querySelector(".page-children") // Select the children div
 
-      if (children && pageLink) {
-        // Set initial state - expanded by default
-        children.classList.add("expanded")
-
-        // Add toggle button
+      if (childrenContainer && pageLink) {
+        // Add toggle button ONLY if children exist
         const toggleBtn = document.createElement("button")
         toggleBtn.className = "page-toggle"
         toggleBtn.innerHTML = '<i class="fas fa-chevron-down"></i>'
-        toggleBtn.setAttribute("aria-expanded", "true")
+        
+        // Determine if children should be expanded based on current page
+        // Find the active page within this branch (including current page and its children)
+        const currentActiveLink = document.querySelector(".page-link.active");
+        let isExpandedDefault = false;
+        if (currentActiveLink) {
+            // Check if currentActiveLink is within this pageItem or its children
+            isExpandedDefault = pageItem.contains(currentActiveLink);
+        }
+
+        if (isExpandedDefault) {
+            childrenContainer.classList.add("expanded");
+            toggleBtn.setAttribute("aria-expanded", "true");
+            toggleBtn.querySelector("i").className = "fas fa-chevron-down";
+        } else {
+            childrenContainer.classList.add("collapsed"); // Start collapsed if not active
+            toggleBtn.setAttribute("aria-expanded", "false");
+            toggleBtn.querySelector("i").className = "fas fa-chevron-right";
+        }
 
         toggleBtn.addEventListener("click", (e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          togglePageChildren(children, toggleBtn)
+          e.preventDefault(); // Prevent default button/link action
+          e.stopPropagation(); // Prevent propagation that might trigger pageLink navigation
+          togglePageChildren(childrenContainer, toggleBtn)
         })
 
-        // Insert toggle button before menu button
-        const menuBtn = pageLink.querySelector(".page-menu-btn")
-        if (menuBtn) {
-          pageLink.insertBefore(toggleBtn, menuBtn)
-        } else {
-          pageLink.appendChild(toggleBtn)
+        // Insert toggle button as the first child of the .page-link-content wrapper
+        const pageLinkContent = pageLink.querySelector(".page-link-content");
+        if (pageLinkContent) {
+            pageLinkContent.insertBefore(toggleBtn, pageLinkContent.firstChild);
+        }
+      } else if (pageLink) {
+        // If no children, ensure no toggle button exists (cleanup from previous runs/updates)
+        const existingToggleBtn = pageLink.querySelector(".page-link-content .page-toggle");
+        if (existingToggleBtn) {
+            existingToggleBtn.remove();
         }
       }
     })
   }
 
-  function togglePageChildren(children, toggleBtn) {
+  function togglePageChildren(childrenContainer, toggleBtn) {
     const icon = toggleBtn.querySelector("i")
-    const isExpanded = children.classList.contains("expanded")
+    const isExpanded = childrenContainer.classList.contains("expanded")
 
     if (isExpanded) {
       // Collapse
-      children.classList.remove("expanded")
-      children.classList.add("collapsed")
+      childrenContainer.classList.remove("expanded")
+      childrenContainer.classList.add("collapsed")
       icon.className = "fas fa-chevron-right"
       toggleBtn.setAttribute("aria-expanded", "false")
     } else {
       // Expand
-      children.classList.remove("collapsed")
-      children.classList.add("expanded")
+      childrenContainer.classList.remove("collapsed")
+      childrenContainer.classList.add("expanded")
       icon.className = "fas fa-chevron-down"
       toggleBtn.setAttribute("aria-expanded", "true")
     }
@@ -225,7 +365,7 @@ window.initSidebar = () => {
 
   // Global functions for menu actions
   window.addChildPage = (parentSlug, parentTitle) => {
-    // Close menu
+    // Close menu first
     document.querySelectorAll(".page-menu.show").forEach((m) => m.classList.remove("show"))
 
     // Get parent page ID and show modal
@@ -242,7 +382,7 @@ window.initSidebar = () => {
   }
 
   window.deletePage = (slug) => {
-    // Close menu
+    // Close menu first
     document.querySelectorAll(".page-menu.show").forEach((m) => m.classList.remove("show"))
 
     // Create custom confirmation dialog
@@ -282,6 +422,6 @@ window.initSidebar = () => {
 
   // Global functions
   window.toggleSidebar = toggleSidebar
-  window.closeAllPanels = closeAllPanels
+  // Note: window.closeAllPanels will be managed by core.js
   window.setupResponsive = setupResponsive
 }
