@@ -32,7 +32,7 @@
                             </a>
                             
                             {% if page.children %}
-                                <div class="page-children expanded"> {# 'expanded' class will be managed by JS based on current page #}
+                                <div class="page-children "> {# 'expanded' class will be managed by JS based on current page #}
                                     {% for child in page.children %}
                                         {{ render_page_item(child, current_page, level + 1) }}
                                     {% endfor %}
