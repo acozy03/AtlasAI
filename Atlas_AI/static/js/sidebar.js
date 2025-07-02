@@ -127,7 +127,10 @@ window.initSidebar = () => {
         e.preventDefault(); // Prevent any default button action
         e.stopPropagation(); // Prevent propagation that might instantly close the modal
         // Use a global event to trigger the modal, so modal.js can handle it
-        document.dispatchEvent(new CustomEvent('showCreatePageModalFromSidebar'));
+        // CHANGED: Directly call window.showCreatePageModal
+        if (window.showCreatePageModal) {
+            window.showCreatePageModal();
+        }
       })
 
       sidebarHeader.appendChild(createBtn)
