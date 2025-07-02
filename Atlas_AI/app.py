@@ -139,7 +139,8 @@ def search_pages_content(query: str, limit: int = 10) -> List[Dict[str, Any]]:
     logger.info(f"Searching pages by content for query: '{query}' (limit: {limit})")
     try:
         # Use PostgreSQL full-text search
-        result = supabase.table('wiki_pages').select('id, title, slug, content').text_search('content', query).limit(limit).execute()
+        # MODIFIED: Apply .limit() before .text_search()
+        result = supabase.table('wiki_pages').select('id, title, slug, content').limit(limit).text_search('content', query).execute()
         logger.info(f"Full-text search returned {len(result.data)} results.")
 
         search_results = []

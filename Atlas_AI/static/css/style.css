@@ -411,6 +411,12 @@ body {
   margin-left: 1rem;
 }
 
+/* Add this to static/css/style.css */
+mark {
+  background-color: #443e91; /* Light blue */
+  color: var(--text-primary); /* Ensure text remains readable */
+  padding: 0.2em; /* Optional: adds a little padding around the highlight */
+}
 
 .create-page-btn:hover {
   background: #2563eb;
