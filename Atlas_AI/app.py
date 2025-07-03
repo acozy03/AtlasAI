@@ -120,7 +120,7 @@ def search_similar_chunks(query: str, limit: int = 5) -> List[Dict[str, Any]]:
         logger.info(f"Calling Supabase RPC 'search_wiki_chunks' with threshold 0.7 and count {limit}")
         result = supabase.rpc('search_wiki_chunks', {
             'query_embedding': query_embedding,
-            'match_threshold': 0.7,
+            'match_threshold': 0.3,
             'match_count': limit
         }).execute()
 
@@ -137,7 +137,7 @@ def search_similar_chunks(query: str, limit: int = 5) -> List[Dict[str, Any]]:
 def search_pages_content(query: str, limit: int = 10) -> List[Dict[str, Any]]:
     """Search for pages by content using text search"""
     logger.info(f"Searching pages by content for query: '{query}' (limit: {limit})")
-    try:
+    try: 
         # Use PostgreSQL full-text search
         # MODIFIED: Apply .limit() before .text_search()
         result = supabase.table('wiki_pages').select('id, title, slug, content').limit(limit).text_search('content', query).execute()
