@@ -24,7 +24,7 @@
 * {
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
+  box-sizing: border-box; /* Ensure consistent box model everywhere */
 }
 
 html {
@@ -39,13 +39,18 @@ body {
   overflow-x: hidden;
 }
 
+/* Remove this specific override unless absolutely necessary after other changes */
+/* .ql-snow .ql-picker.ql-expanded .ql-picker-label {
+  z-index: 101 !important;
+} */
+
 /* Navigation */
 .navbar {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  z-index: 50;
+  z-index: 50; /* Keep this */
   background: rgba(17, 24, 39, 0.8);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -125,6 +130,8 @@ body {
 .global-search-container {
   position: relative;
   width: 100%;
+  display: flex; /* Ensure flex for alignment */
+  align-items: center; /* Vertically align items */
 }
 
 .global-search {
@@ -136,6 +143,7 @@ body {
   color: var(--text-primary);
   font-size: 0.875rem;
   transition: all 0.2s ease;
+  vertical-align: middle; /* Align input with icon */
 }
 
 .global-search::placeholder {
@@ -385,17 +393,12 @@ body {
 .sidebar-header {
   padding: 1.5rem;
   border-bottom: 1px solid var(--border-primary);
-  /* MODIFIED: Add flexbox for centering */
   display: flex;
   align-items: center; /* Vertically center items */
   justify-content: space-between; /* Distribute items with space between them */
 }
 
 .create-page-btn {
-  /* MODIFIED: Remove absolute positioning */
-  /* position: absolute; */
-  /* top: 1.5rem; */
-  /* right: 1.5rem; */
   width: 2rem;
   height: 2rem;
   background: var(--accent-blue);
@@ -407,7 +410,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* MODIFIED: Add margin-left for spacing if needed (adjust as per visual) */
   margin-left: 1rem;
 }
 
@@ -425,6 +427,9 @@ mark {
 
 .search-container {
   position: relative;
+  flex-grow: 1; /* Allow search input to grow in flex container */
+  display: flex; /* Make search container a flex container */
+  align-items: center; /* Vertically align input and icon */
 }
 
 .search-icon {
@@ -445,6 +450,7 @@ mark {
   border-radius: 0.5rem;
   color: var(--text-primary);
   font-size: 0.875rem;
+  vertical-align: middle; /* Ensure vertical alignment */
 }
 
 .search-input::placeholder {
@@ -585,7 +591,7 @@ mark {
   border: 1px solid var(--border-primary);
   border-radius: 0.5rem;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-  z-index: 1001;
+  z-index: 1001; /* Keep this high */
   min-width: 180px;
   opacity: 0;
   visibility: hidden;
@@ -757,6 +763,8 @@ mark {
   margin-left: 20rem;
   transition: margin-left 0.3s ease;
   overflow-y: auto;
+  position: relative; /* Add this to create a stacking context for its children */
+   /* Give it a base z-index */
 }
 
 .main-content.expanded {
@@ -829,6 +837,7 @@ mark {
   line-height: 1.8;
 }
 
+/* Base styles for the content area, applied when not in edit mode (Quill inactive) */
 .content {
   cursor: pointer;
   transition: all 0.2s ease;
@@ -839,21 +848,23 @@ mark {
   color: var(--text-secondary);
   /* Add invisible border to prevent jumping */
   border: 2px solid transparent;
+  /* z-index: -1; */ /* REMOVED THIS LINE */
 }
 
 .content:hover {
   background: rgba(59, 130, 246, 0.02);
 }
 
-.content[contenteditable="true"] {
+/* This style is no longer needed with Quill, as Quill creates its own editor div */
+/* .content[contenteditable="true"] {
   background: rgba(59, 130, 246, 0.05);
   border-color: var(--accent-blue);
   outline: none;
   cursor: text;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-}
+} */
 
-/* Rich Editor Toolbar */
+/* Rich Editor Toolbar (now for Quill's toolbar) */
 .rich-editor-toolbar {
   display: flex;
   align-items: center;
@@ -864,7 +875,9 @@ mark {
   border-radius: 0.5rem;
   margin-bottom: 2rem; /* Increased space between toolbar and content */
   backdrop-filter: blur(20px);
-  flex-wrap: wrap;
+  -webkit-backdrop-filter: blur(20px);
+  z-index: 10; /* Increased Z-index to be reliably above content */
+  position: relative; /* Ensure it forms a stacking context */
 }
 
 .toolbar-group {
@@ -880,6 +893,7 @@ mark {
   margin: 0 0.5rem;
 }
 
+/* Styles for custom toolbar buttons (no longer directly used by Quill's default, but good for reference) */
 .toolbar-btn {
   display: flex;
   align-items: center;
@@ -935,7 +949,7 @@ mark {
   margin-left: 0.125rem;
 }
 
-/* Enhanced markdown styling */
+/* Enhanced markdown styling for rendered content */
 .content h1,
 .content h2,
 .content h3,
@@ -1113,8 +1127,6 @@ mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 1.5rem;
-  font-size: 1.875rem;
   color: #60a5fa;
 }
 
@@ -1137,7 +1149,7 @@ mark {
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
-  z-index: 100;
+  z-index: 100; /* Keep high, but allow editor popups to be higher */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1283,7 +1295,7 @@ mark {
   border-left: 1px solid var(--border-primary);
   transform: translateX(100%);
   transition: transform 0.3s ease;
-  z-index: 30;
+  z-index: 30; /* Keep this */
 }
 
 .chat-panel.open {
@@ -1362,8 +1374,6 @@ mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 1rem;
-  font-size: 1.5rem;
   color: var(--accent-green);
 }
 
@@ -1730,4 +1740,222 @@ mark {
 .color-picker-modal input[type="color"]::-moz-color-sample {
     border: none;
     border-radius: 0.5rem;
+}
+
+
+/* --- Quill.js Custom Styling Overrides --- */
+
+/* Quill Editor Container (where the editor content lives) */
+.ql-container {
+  font-family: "Inter", sans-serif;
+  font-size: 1rem;
+  border-radius: 0.75rem;
+  min-height: 200px;
+  border: 1px solid var(--border-primary) !important; /* Important to override Quill's default */
+  background: var(--bg-secondary) !important;
+  color: var(--text-secondary) !important;
+  transition: all 0.2s ease;
+  position: relative; /* Important: Create a stacking context here */
+  z-index: 2; /* Make it higher than main-content's base of 1, but lower than toolbar */
+}
+
+/* Editor content area */
+.ql-editor {
+  line-height: 1.8;
+  padding: 1rem;
+  color: var(--text-secondary);
+  z-index: 3; /* Ensure content is above container background if needed */
+}
+
+/* Focus state for editor */
+.ql-container.ql-snow.ql-editor.ql-blank::before {
+    color: var(--text-muted); /* Placeholder color */
+    font-style: italic;
+    left: 1rem; /* Adjust placeholder position */
+    right: 1rem;
+}
+
+/* Remove default Quill focus outline */
+.ql-container.ql-snow:focus-within {
+  border-color: var(--accent-blue) !important; /* Keep a subtle border color */
+  box-shadow: none !important; /* Remove blue shadow */
+  outline: none !important; /* Remove default outline */
+}
+
+/* Toolbar styling */
+.ql-toolbar {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-top: none !important; /* Remove top border of Quill's default toolbar */
+  border-radius: 0.5rem !important; /* Inherit from rich-editor-toolbar */
+  margin-bottom: 1.5rem; /* Space between toolbar and editor */
+  padding: 0.75rem 1rem !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Toolbar buttons and controls */
+.ql-toolbar .ql-picker-label,
+.ql-toolbar .ql-picker-item,
+.ql-toolbar .ql-stroke,
+.ql-toolbar .ql-fill,
+.ql-toolbar .ql-even,
+.ql-toolbar .ql-format-group .ql-stroke {
+  color: var(--text-tertiary) !important; /* Default icon/text color */
+  fill: var(--text-tertiary) !important; /* Fill for icons */
+}
+
+/* Hover state for toolbar buttons */
+.ql-toolbar button:hover .ql-stroke,
+.ql-toolbar button:hover .ql-fill,
+.ql-toolbar button:hover .ql-picker-label .ql-stroke,
+.ql-toolbar .ql-picker-label:hover .ql-stroke,
+.ql-toolbar .ql-picker-label:hover {
+  color: var(--text-primary) !important;
+  fill: var(--text-primary) !important;
+}
+
+.ql-toolbar button.ql-active .ql-stroke,
+.ql-toolbar button.ql-active .ql-fill,
+.ql-toolbar .ql-picker-label.ql-active .ql-stroke,
+.ql-toolbar .ql-picker-label.ql-active {
+  color: var(--accent-blue) !important;
+  fill: var(--accent-blue) !important;
+}
+
+.ql-toolbar button.ql-active {
+  background: rgba(59, 130, 246, 0.2) !important; /* Active background */
+  border-color: transparent !important;
+}
+
+/* Dropdowns (e.g., header, font size) */
+.ql-picker {
+  color: var(--text-tertiary) !important;
+  background: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-secondary) !important;
+  border-radius: 0.375rem !important;
+  /* z-index: 100 !important; */ /* Remove or keep lower if label handles stacking */
+}
+
+/* Dropdown menu options */
+.ql-picker.ql-expanded .ql-picker-options {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-primary) !important;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3) !important;
+  border-radius: 0.5rem !important;
+  padding: 0.5rem 0;
+  color: var(--text-secondary);
+  z-index: 100 !important; /* Keep this high */
+}
+
+.ql-picker-item {
+  color: var(--text-secondary) !important;
+  padding: 0.5rem 1rem !important;
+  /* z-index: 100 !important; */ /* This is often redundant if options panel has it */
+}
+
+.ql-picker-item:hover {
+  background: rgba(75, 85, 99, 0.3) !important;
+  color: var(--text-primary) !important;
+  /* z-index: 100 !important; */
+}
+
+.ql-picker-item.ql-selected {
+  background: rgba(59, 130, 246, 0.2) !important;
+  color: var(--accent-blue) !important;
+  /* z-index: 100 !important; */
+}
+
+/* Tooltips (e.g., link editor) */
+.ql-tooltip {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-primary) !important;
+  border-radius: 0.5rem !important;
+  color: var(--text-secondary) !important;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3) !important;
+  z-index: 100 !important; /* Keep this high */
+}
+
+.ql-tooltip a.ql-action,
+.ql-tooltip a.ql-remove {
+  color: var(--accent-blue) !important;
+}
+
+.ql-tooltip .ql-action:hover {
+  color: var(--text-primary) !important;
+}
+
+.ql-tooltip input[type=text] {
+  background: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-secondary) !important;
+  color: var(--text-primary) !important;
+  border-radius: 0.375rem !important;
+  padding: 0.5rem !important;
+}
+
+/* Specific button overrides for toolbar-btn success/secondary (if Quill generates these, unlikely) */
+/* Quill generates its own button elements, so these custom styles might need to be re-applied to Quill's selectors */
+.ql-toolbar button.ql-link::after,
+.ql-toolbar button.ql-color::after {
+    /* Adjustments for custom icon-only buttons if needed */
+}
+
+/* Match header font sizes and margins generated by Quill */
+.ql-editor h1 {
+  font-size: 2.25rem;
+  border-bottom: 2px solid rgba(59, 130, 246, 0.3);
+  padding-bottom: 0.5rem;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.ql-editor h2 {
+  font-size: 1.875rem;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.ql-editor h3 {
+  font-size: 1.5rem;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+/* Ensure code blocks and blockquotes generated by Quill match our theme */
+.ql-editor pre.ql-syntax { /* For Quill's code blocks */
+  background: rgba(17, 17, 17, 0.9);
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  overflow-x: auto;
+  border: 1px solid var(--border-primary);
+  margin: 1rem 0;
+  color: var(--text-secondary); /* Code text color */
+  font-family: "JetBrains Mono", monospace;
+}
+
+.ql-editor blockquote {
+  border-left: 4px solid var(--accent-blue);
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: var(--text-tertiary);
+  font-style: italic;
+  background: rgba(59, 130, 246, 0.05);
+  padding: 1rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+
+.ql-editor p {
+    margin-bottom: 1rem;
+}
+
+.ql-editor ul, .ql-editor ol {
+    margin-bottom: 1rem;
+    padding-left: 2rem;
+}
+
+.ql-editor li {
+    margin-bottom: 0.5rem;
 }

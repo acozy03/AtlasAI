@@ -1,267 +1,160 @@
-// Markdown rendering and conversion utilities
 window.initMarkdown = () => {
-  renderMarkdown()
+  let isQuillActive = false;
+  const marked = window.marked;
+  const TurndownService = window.TurndownService;
+
+  renderMarkdown();
 
   function renderMarkdown() {
-    const pageContent = document.getElementById("pageContent")
-    if (!pageContent) return;
+    const pageContent = document.getElementById("pageContent");
+    if (!pageContent || isQuillActive) return;
 
     const rawContent = pageContent.getAttribute("data-original-content") || pageContent.textContent;
     if (!rawContent) return;
 
-    const html = parseMarkdown(rawContent);
+    const html = marked.parse(rawContent);
     pageContent.innerHTML = html;
   }
 
-  function parseMarkdown(text) {
-    let html = text;
+function convertHtmlToMarkdown(html) {
+  console.log("Converting HTML to Markdown:");
+  console.log("Input HTML:", html);
 
-    // Headers (must be at start of line)
-    html = html.replace(/^### (.*$)/gm, "<h3>$1</h3>");
-    html = html.replace(/^## (.*$)/gm, "<h2>$1</h2>");
-    html = html.replace(/^# (.*$)/gm, "<h1>$1</h1>");
+  const turndownService = new TurndownService({
+    headingStyle: "atx",
+    codeBlockStyle: "fenced",
+    bulletListMarker: "-",
+    emDelimiter: "*",
+    strongDelimiter: "**",
+    linkStyle: "inlined",
+    linkReferenceStyle: "full",
+  });
 
-    // Bold and italic
-    html = html.replace(/\*\*\*(.*?)\*\*\*/g, "<strong><em>$1</em></strong>");
-    html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-    html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
+  // Custom rule for handling Quill-style lists with indentation
+  turndownService.addRule("quillList", {
+    filter: "li",
+    replacement: (content, node, options) => {
+      const indentClass = Array.from(node.classList).find(cls =>
+        cls.startsWith("ql-indent-")
+      );
+      const indentLevel = indentClass
+        ? parseInt(indentClass.replace("ql-indent-", ""), 10)
+        : 0;
 
-    // Code blocks
-    html = html.replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>");
-    html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+      const indentation = "  ".repeat(indentLevel); // 2 spaces per level
 
-    // Links
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>'); // Changed $$ to () for standard markdown links
-
-    // Lists (improved for nesting)
-    const lines = html.split('\n');
-    let inList = false;
-    let listStack = []; // Stores current list type (ul/ol) and indentation level
-
-    let processedLines = [];
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const matchUl = line.match(/^(\s*)[*-] (.+)/);
-      const matchOl = line.match(/^(\s*)(\d+)\. (.+)/);
-
-      if (matchUl || matchOl) {
-        const indent = matchUl ? matchUl[1].length : matchOl[1].length;
-        const listItemContent = matchUl ? matchUl[2] : matchOl[3];
-        const listType = matchUl ? 'ul' : 'ol';
-
-        if (!inList) {
-          // Start new list
-          processedLines.push(`<${listType}>`);
-          listStack.push({ type: listType, indent: indent });
-          inList = true;
-        } else {
-          // Check for nesting/de-nesting
-          let currentList = listStack[listStack.length - 1];
-          if (indent > currentList.indent) {
-            // Nested list
-            processedLines.push(`<${listType}>`);
-            listStack.push({ type: listType, indent: indent });
-          } else if (indent < currentList.indent) {
-            // De-nest
-            while (listStack.length > 0 && indent < listStack[listStack.length - 1].indent) {
-              processedLines.push(`</${listStack.pop().type}>`);
-            }
-            if (listStack.length === 0 || indent > listStack[listStack.length - 1].indent) {
-              // If we de-nested completely or to an invalid level, start new list
-              processedLines.push(`<${listType}>`);
-              listStack.push({ type: listType, indent: indent });
-            } else if (listStack[listStack.length - 1].type !== listType) {
-              // Changed list type at same level
-              processedLines.push(`</${listStack.pop().type}>`);
-              processedLines.push(`<${listType}>`);
-              listStack.push({ type: listType, indent: indent });
-            }
-          } else if (currentList.type !== listType) {
-            // Same level, but different list type (e.g., ul to ol)
-            processedLines.push(`</${currentList.type}>`);
-            processedLines.push(`<${listType}>`);
-            listStack[listStack.length - 1].type = listType;
-          }
-        }
-        processedLines.push(`<li>${listItemContent}</li>`);
+      const listType = node.getAttribute("data-list");
+      let prefix;
+      if (listType === "ordered") {
+        const start = node.parentNode.getAttribute("start");
+        const index = Array.prototype.indexOf.call(
+          node.parentNode.children,
+          node
+        );
+        prefix = (start ? Number(start) + index : index + 1) + ". ";
       } else {
-        // Not a list item
-        while (listStack.length > 0) {
-          processedLines.push(`</${listStack.pop().type}>`);
-        }
-        inList = false;
-        processedLines.push(line);
+        prefix = options.bulletListMarker + " ";
       }
-    }
 
-    // Close any open lists at the end
-    while (listStack.length > 0) {
-      processedLines.push(`</${listStack.pop().type}>`);
-    }
+      // Clean and indent multiline content
+      content = content
+        .replace(/^\n+/, "")
+        .replace(/\n+$/, "")
+        .replace(/\n/gm, `\n${indentation}  `);
 
-    html = processedLines.join('\n');
+      const result = `\n${indentation}${prefix}${content.replace(/\n/g, `\n${indentation}  `)}\n`;
 
-    // Blockquotes
-    html = html.replace(/^> (.+$)/gm, "<blockquote>$1</blockquote>");
+      console.log(
+        `[quillList] indentLevel=${indentLevel}, listType=${listType}, prefix="${prefix}" ->`,
+        JSON.stringify(result)
+      );
 
-    // Paragraphs (wrap text not already in a block-level element)
-    html = html.split('\n\n').map(p => {
-        if (p.trim() === '' || p.match(/<(h[1-6]|ul|ol|blockquote|pre|table|div)>/i)) {
-            return p;
-        }
-        return `<p>${p.replace(/\n/g, '<br>')}</p>`;
-    }).join('\n\n');
+      return result;
+    },
+  });
 
+  // Handle inline colored text
+  turndownService.addRule("coloredText", {
+    filter: (node, options) =>
+      node.style && (node.style.color || node.style.backgroundColor),
+    replacement: (content, node, options) => {
+      const color = node.style.color;
+      const backgroundColor = node.style.backgroundColor;
 
-    // Clean up multiple br tags if they appear
-    html = html.replace(/(<br>\s*){3,}/g, "<br><br>");
-
-    return html;
-  }
-
-  // FIXED: Simple conversion with single newlines only, improved for nested lists
-  function convertHtmlToMarkdown(html) {
-    console.log("Converting HTML to Markdown:");
-    console.log("Input HTML:", html);
-
-    const temp = document.createElement("div");
-    temp.innerHTML = html;
-
-    let markdown = "";
-
-    function processNode(node, indentLevel = 0) {
-      let nodeMarkdown = "";
-      if (node.nodeType === Node.TEXT_NODE) {
-        nodeMarkdown = node.textContent;
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        const tagName = node.tagName.toLowerCase();
-        const childrenMarkdown = Array.from(node.childNodes)
-          .map(child => processNode(child, indentLevel + 1))
-          .join("");
-
-        switch (tagName) {
-          case "h1":
-            nodeMarkdown = `# ${childrenMarkdown}`;
-            break;
-          case "h2":
-            nodeMarkdown = `## ${childrenMarkdown}`;
-            break;
-          case "h3":
-            nodeMarkdown = `### ${childrenMarkdown}`;
-            break;
-          case "h4":
-            nodeMarkdown = `#### ${childrenMarkdown}`;
-            break;
-          case "h5":
-            nodeMarkdown = `##### ${childrenMarkdown}`;
-            break;
-          case "h6":
-            nodeMarkdown = `###### ${childrenMarkdown}`;
-            break;
-          case "strong":
-          case "b":
-            nodeMarkdown = `**${childrenMarkdown}**`;
-            break;
-          case "em":
-          case "i":
-            nodeMarkdown = `*${childrenMarkdown}*`;
-            break;
-          case "u":
-            nodeMarkdown = `<u>${childrenMarkdown}</u>`;
-            break;
-          case "strike":
-          case "s":
-            nodeMarkdown = `~~${childrenMarkdown}~~`;
-            break;
-          case "code":
-            // Handle inline code vs. block code
-            if (node.parentNode && node.parentNode.tagName.toLowerCase() === 'pre') {
-                nodeMarkdown = childrenMarkdown; // For code inside <pre>
-            } else {
-                nodeMarkdown = `\`${childrenMarkdown}\``; // For inline code
-            }
-            break;
-          case "pre":
-            nodeMarkdown = `\`\`\`\n${childrenMarkdown}\n\`\`\``;
-            break;
-          case "blockquote":
-            nodeMarkdown = `> ${childrenMarkdown.split('\n').join('\n> ')}`;
-            break;
-          case "ul":
-          case "ol": 
-            const listItems = Array.from(node.children)
-              .filter(child => child.tagName.toLowerCase() === 'li')
-              .map((li, idx) => {
-                const liContent = processNode(li, 0); // Process li content at its own level
-                const prefix = tagName === 'ol' ? `${idx + 1}.` : '-';
-                return '  '.repeat(indentLevel) + `${prefix} ${liContent.trim()}`;
-              })
-              .join('\n');
-            nodeMarkdown = listItems;
-            break;
-          case "li":
-            // Handled by ul/ol processing, return raw content for list item context
-            nodeMarkdown = childrenMarkdown;
-            break;
-          case "br":
-            nodeMarkdown = "\n";
-            break;
-          case "p":
-            nodeMarkdown = childrenMarkdown;
-            break;
-          case "div":
-            nodeMarkdown = childrenMarkdown;
-            break;
-          case "a":
-            const href = node.getAttribute("href");
-            nodeMarkdown = `[${childrenMarkdown}](${href})`;
-            break;
-          case "span": // Handle spans that might contain font colors
-            if (node.style.color) {
-              nodeMarkdown = `<span style="color:${node.style.color}">${childrenMarkdown}</span>`;
-            } else {
-              nodeMarkdown = childrenMarkdown;
-            }
-            break;
-          case "font": // Handle deprecated font tag for color
-            if (node.color) {
-              nodeMarkdown = `<span style="color:${node.color}">${childrenMarkdown}</span>`;
-            } else {
-              nodeMarkdown = childrenMarkdown;
-            }
-            break;
-          default:
-            nodeMarkdown = childrenMarkdown;
-            break;
-        }
+      if (color && backgroundColor) {
+        return `<span style="color: ${color}; background-color: ${backgroundColor};">${content}</span>`;
+      } else if (color) {
+        return `<span style="color: ${color};">${content}</span>`;
+      } else if (backgroundColor) {
+        return `<span style="background-color: ${backgroundColor};">${content}</span>`;
       }
-      return nodeMarkdown;
-    }
+      return content;
+    },
+  });
 
-    // Iterate through top-level children to maintain block-level separation
-    Array.from(temp.children).forEach(node => {
-        const nodeMarkdown = processNode(node, 0);
-        if (nodeMarkdown.trim() !== "") {
-            markdown += nodeMarkdown;
-            if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'blockquote', 'pre', 'p'].includes(node.tagName.toLowerCase())) {
-                markdown += "\n\n"; // Add double newline for block-level elements
-            } else {
-                markdown += "\n"; // Single newline for inline elements or others
-            }
-        }
-    });
+  // Blockquote formatting
+  turndownService.addRule("blockquote", {
+    filter: "blockquote",
+    replacement: (content, node, options) => {
+      const lines = content.trim().split("\n");
+      const quotedLines = lines.map((line) => `> ${line.trim()}`);
+      return quotedLines.join("\n");
+    },
+  });
 
-    // Clean up the result
-    markdown = markdown
-      .replace(/^\n+/, "") // Remove leading newlines
-      .replace(/\n+$/, "") // Remove trailing newlines
-      .replace(/\n\n+/g, "\n\n"); // Collapse multiple newlines to a maximum of two
+  // Code block formatting
+  turndownService.addRule("codeBlock", {
+    filter: (node, options) =>
+      node.nodeName === "PRE" &&
+      node.firstChild &&
+      node.firstChild.nodeName === "CODE",
+    replacement: (content, node, options) => {
+      const language =
+        node.firstChild.className.replace("language-", "") || "";
+      return `\`\`\`${language}\n${content.trim()}\n\`\`\``;
+    },
+  });
 
-    console.log("Output Markdown:", JSON.stringify(markdown));
-    return markdown;
-  }
+  // Inline code formatting
+  turndownService.addRule("inlineCode", {
+    filter: (node, options) =>
+      node.nodeName === "CODE" && node.parentNode.nodeName !== "PRE",
+    replacement: (content, node, options) => `\`${content}\``,
+  });
 
-  // Global functions
+  // Link formatting
+  turndownService.addRule("links", {
+    filter: "a",
+    replacement: (content, node, options) => {
+      const href = node.getAttribute("href");
+      const title = node.getAttribute("title");
+
+      if (!href) return content;
+
+      if (title) {
+        return `[${content}](${href} "${title}")`;
+      }
+      return `[${content}](${href})`;
+    },
+  });
+
+  let markdown = turndownService.turndown(html);
+
+  // Normalize output
+  // markdown = markdown
+  //   .replace(/\n{3,}/g, "\n\n") // Collapse 3+ newlines to 2
+  //   .replace(/(\n- .+)\n{2,}(\n- .+)/g, "$1\n$2")
+  //   .replace(/(\n1\. .+)\n{2,}(\n1\. .+)/g, "$1\n$2")
+  //   .replace(/ +/g, " ")
+  //   .trim();
+
+  console.log("Output Markdown:", JSON.stringify(markdown));
+  return markdown;
+}
+
   window.renderMarkdown = renderMarkdown;
   window.convertHtmlToMarkdown = convertHtmlToMarkdown;
+  window.setQuillActive = (active) => {
+    isQuillActive = active;
+  };
 };

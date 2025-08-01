@@ -45,8 +45,20 @@ document.addEventListener("DOMContentLoaded", () => {
     // Initialize authentication (optional - won't break if API doesn't exist)
     initAuth()
 
-    // Initialize all modules
-    if (window.initEditing) window.initEditing()
+     if (window.Quill) { // <--- ADD THIS CHECK
+      if (window.initEditing) window.initEditing();
+    } else {
+      console.error("Quill.js not available when initEditing was attempted. Retrying...");
+      // Optional: Add a retry mechanism or ensure script loading order
+      // A common pattern for robust loading:
+      const checkQuillReady = setInterval(() => {
+        if (window.Quill) {
+          clearInterval(checkQuillReady);
+          if (window.initEditing) window.initEditing();
+          console.log("Quill.js is now available, editing module initialized.");
+        }
+      }, 100); // Check every 100ms
+    }
     if (window.initChat) window.initChat()
     if (window.initSidebar) window.initSidebar()
     if (window.initSearch) window.initSearch()
@@ -78,6 +90,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (window.toggleChat) window.toggleChat()
       }
 
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault()
+        console.log("Toggling sidebar")
+        toggleSidebar()
+      }
       // Escape to close panels
       if (e.key === "Escape") {
         if (window.AtlasAI && window.AtlasAI.closeAllPanels) {
