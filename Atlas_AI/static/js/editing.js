@@ -204,6 +204,7 @@ window.initEditing = () => {
       </span>
       <span class="ql-formats">
         <button class="ql-link" title="Add Link"></button>
+        <button class="ql-image" title="Insert Image"></button>
         <select class="ql-color" title="Font Color">
           <option selected></option>
           <option value="#e60000"></option>
@@ -304,6 +305,47 @@ window.initEditing = () => {
               } else {
                 this.quill.format("link", false)
               }
+            },
+            // Custom image handler
+            image: function() {
+              const input = document.createElement('input');
+              input.setAttribute('type', 'file');
+              input.setAttribute('accept', 'image/*, .pdf, .csv, .xlsx');
+              input.click();
+
+              input.onchange = async () => {
+                const file = input.files[0];
+                if (file) {
+                  const formData = new FormData();
+                  formData.append('file', file);
+            
+                  try {
+                    const response = await fetch('/api/upload-file', {
+                      method: 'POST',
+                      body: formData,
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.url) {
+                      const range = this.quill.getSelection();
+                      
+                      // Check if the file is an image
+                      if (file.type.startsWith('image/')) {
+                        this.quill.insertEmbed(range.index, 'image', data.url);
+                      } else {
+                        // For other file types, insert a hyperlink
+                        const linkText = file.name;
+                        this.quill.insertText(range.index, linkText, 'link', data.url);
+                      }
+                    } else {
+                      console.error('File upload failed:', data.error);
+                    }
+                  } catch (error) {
+                    console.error('Error during file upload:', error);
+                  }
+                }
+              };
             },
           },
         },

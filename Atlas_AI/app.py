@@ -2,13 +2,14 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, f
 from supabase import create_client, Client
 from datetime import datetime
 import os
-import openai
 import uuid
 import re
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 import logging # Keep logging for debugging
 import collections
+from openai import OpenAI
+import requests
 
 load_dotenv()
 app = Flask(__name__)
@@ -21,11 +22,11 @@ logger = logging.getLogger(__name__) # Use a logger instance
 
 # Supabase configuration
 SUPABASE_URL = os.getenv('SUPABASE_URL')
-SUPABASE_KEY = os.getenv('SUPABASE_ANON_KEY')
+SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Set OpenAI API key
-openai.api_key = os.getenv('OPENAI_API_KEY')
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 # Helper Functions
 def create_slug(title: str) -> str:
@@ -81,7 +82,7 @@ def generate_embeddings(page_id: str, content: str): # Content is now expected t
 
             # Generate embedding
             logger.info(f"Generating embedding for chunk {i} of page_id: {page_id} (length: {len(chunk)})")
-            response = openai.embeddings.create(
+            response = client.embeddings.create(
                 model="text-embedding-3-small",
                 input=chunk
             )
@@ -109,7 +110,7 @@ def search_similar_chunks(query: str, limit: int = 5) -> List[Dict[str, Any]]:
     try:
         # Generate embedding for query
         logger.info("Generating embedding for query...")
-        response = openai.embeddings.create(
+        response = client.embeddings.create(
             model="text-embedding-3-small",
             input=query
         )
@@ -587,7 +588,7 @@ Guidelines:
 
         # Generate response using OpenAI
         logger.info("API: Calling OpenAI chat completions.")
-        response = openai.chat.completions.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -695,6 +696,36 @@ def wiki_api():
             logger.error(f"API: Error creating wiki page via API: {e}", exc_info=True)
             return jsonify({'error': str(e)}), 500
 
+@app.route('/api/upload-file', methods=['POST'])
+def upload_file():
+    logger.info("API: Received POST request for file upload.")
+    uploaded_file = request.files.get('file')
+
+    if not uploaded_file:
+        logger.warning("API: No file provided in upload request.")
+        return jsonify({'error': 'No file provided'}), 400
+
+    try:
+        # Create a unique filename to prevent collisions
+        filename = f"wiki-files/{uuid.uuid4()}-{uploaded_file.filename}"
+        file_bytes = uploaded_file.read()
+
+        # Upload the file to your private Supabase Storage bucket
+        # Make sure to replace 'your-bucket-name' with the name you created
+        supabase.storage.from_('wiki-files').upload(filename, file_bytes, {"content-type": uploaded_file.content_type})
+
+        # Generate a signed URL for temporary access (e.g., 60 seconds)
+        signed_url_response = supabase.storage.from_('wiki-files').create_signed_url(filename, 60)
+
+        signed_url = signed_url_response['signedURL']
+
+        logger.info(f"API: File uploaded successfully. Signed URL generated: {signed_url}")
+        return jsonify({'url': signed_url})
+
+    except Exception as e:
+        logger.error(f"API: Error uploading file: {e}", exc_info=True)
+        return jsonify({'error': f'Failed to upload file: {str(e)}'}), 500
+
 @app.route('/api/search')
 def search_api():
     """Global search API endpoint"""
@@ -737,4 +768,5 @@ def health_check():
 
 if __name__ == '__main__':
     logger.info("Starting Flask application...")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=True, host='0.0.0.0', port=port)
