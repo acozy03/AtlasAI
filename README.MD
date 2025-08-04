@@ -1,4 +1,4 @@
-# AtlasAI - Flask + Supabase Version
+# AtlasAI
 
 A Python Flask-based internal wiki system with AI assistant capabilities, powered by Supabase.
 
