@@ -20,11 +20,11 @@ A Python Flask-based internal wiki system with AI assistant capabilities, powere
 ## Quick Setup
 
 1. **Clone and install dependencies**:
-   \`\`\`bash
+   ```
    git clone <your-repo>
    cd atlasai-flask-supabase
    pip install -r requirements.txt
-   \`\`\`
+   ```
 
 2. **Create Supabase project**:
    - Go to [supabase.com](https://supabase.com)
@@ -32,30 +32,24 @@ A Python Flask-based internal wiki system with AI assistant capabilities, powere
    - Note your project URL and API keys
 
 3. **Configure environment**:
-   \`\`\`bash
+   ```
    cp .env.example .env
    # Edit .env with your Supabase and OpenAI credentials
-   \`\`\`
+   ```
 
-4. **Setup database tables**:
-   \`\`\`bash
-   python setup_supabase.py
-   \`\`\`
-   This will show you the SQL script to run in your Supabase dashboard.
-
-5. **Run the application**:
-   \`\`\`bash
+4. **Run the application**:
+   ```
    python app.py
-   \`\`\`
+   ```
 
-6. **Access AtlasAI**:
+5. **Access AtlasAI**:
    Open http://localhost:5000 in your browser
 
 ## Environment Variables
 
 Create a `.env` file with:
 
-\`\`\`bash
+```
 # Supabase Configuration
 SUPABASE_URL=https://your-project-id.supabase.co
 SUPABASE_ANON_KEY=your-anon-key-here
@@ -66,7 +60,7 @@ OPENAI_API_KEY=your-openai-api-key-here
 
 # Flask Configuration
 SECRET_KEY=your-secret-key-here
-\`\`\`
+```
 
 ## Database Setup
 
