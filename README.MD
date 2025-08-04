@@ -83,25 +83,6 @@ SECRET_KEY=your-secret-key-here
 - **Search**: Use the search box in the sidebar to find pages
 - **Organize**: Set parent pages to create a hierarchy
 
-## Deployment
-
-### Vercel (Recommended)
-1. Connect your GitHub repo to Vercel
-2. Add environment variables in Vercel dashboard
-3. Deploy automatically
-
-### Other Platforms
-- **Heroku**: Add Procfile with `web: python app.py`
-- **Railway**: Connect repo and add environment variables
-- **DigitalOcean App Platform**: Use Python buildpack
-
-## Health Check
-
-Visit `/health` to check:
-- Supabase connection status
-- Database table accessibility
-- Current page count
-
 ## Features
 
 ### Wiki System
@@ -124,20 +105,3 @@ Visit `/health` to check:
 - **AI**: OpenAI embeddings and chat completion
 - **Frontend**: Bootstrap + Vanilla JavaScript
 - **Deployment**: Vercel/Heroku/Railway ready
-
-## Troubleshooting
-
-**Database Connection Issues**:
-- Check your Supabase URL and keys
-- Ensure tables are created via SQL script
-- Verify RLS policies allow operations
-
-**AI Assistant Not Working**:
-- Verify OpenAI API key is set
-- Check if embeddings are being generated
-- Ensure vector search function exists
-
-**Page Not Loading**:
-- Check Flask logs for errors
-- Verify Supabase connection
-- Try the `/health` endpoint
