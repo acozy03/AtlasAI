@@ -311,9 +311,16 @@ Guidelines:
         supabase.table('chat_logs').insert(chat_data).execute()
         logger.info("API: Chat data logged successfully.")
 
+        sources_with_slugs = []
+        unique_titles = list(set([chunk['page_title'] for chunk in relevant_chunks]))
+        for title in unique_titles:
+            slug = get_page_slug_by_title(title)
+            if slug:
+                sources_with_slugs.append({'title': title, 'slug': slug})
+
         return jsonify({
             'response': answer,
-            'sources': list(set([chunk['page_title'] for chunk in relevant_chunks]))
+            'sources': sources_with_slugs
         })
 
     except Exception as e:
@@ -493,6 +500,22 @@ def build_page_tree(pages: List[Dict]) -> List[Dict]:
 
     return root_pages
 
+
+def get_page_slug_by_title(title: str) -> str | None:
+    """Get a wiki page slug by title"""
+    logger.info(f"Fetching page slug by title: '{title}'")
+    try:
+        result = supabase.table('wiki_pages').select('slug').eq('title', title).single().execute()
+        if result.data:
+            logger.info(f"Slug '{result.data['slug']}' found for title: '{title}'")
+            return result.data['slug']
+        else:
+            logger.info(f"Page not found for title: '{title}'")
+            return None
+    except Exception as e:
+        logger.error(f"Error fetching page slug by title: '{title}'. Error: {e}", exc_info=True)
+        return None
+    
 @app.route('/')
 @login_required
 def index():

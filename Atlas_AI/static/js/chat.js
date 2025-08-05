@@ -170,12 +170,14 @@ window.initChat = () => {
   function addSourcesMessage(sources) {
     const sourcesDiv = document.createElement("div")
     sourcesDiv.className = "bot-message animate-fade-in"
+        const sourceLinks = sources.map(source => `<a href="/wiki/${source.slug}" class="text-blue-400 hover:underline" target="_blank">${source.title}</a>`).join(", ");
+
     sourcesDiv.innerHTML = `
       <i class="fas fa-link text-blue-400"></i>
       <div class="message-content text-sm" style="background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.3);">
-        <strong>Sources:</strong> ${sources.join(", ")}
+        <strong>Sources:</strong> ${sourceLinks}
       </div>
-    `
+    `;
     chatMessages?.appendChild(sourcesDiv)
   }
 

@@ -361,15 +361,15 @@ body {
 
 .app-layout {
   display: flex;
-  height: calc(100vh - 5rem);
+  height: calc(100vh);
 }
 
 /* Sidebar */
 .sidebar {
   position: fixed;
   left: 0;
-  top: 5rem;
-  height: calc(100vh - 5rem);
+  top: 4.5rem;
+  height: calc(100vh - 4.5rem);
   width: 20rem;
   background: var(--bg-card);
   backdrop-filter: blur(20px);
@@ -1299,8 +1299,8 @@ mark {
 .chat-panel {
   position: fixed;
   right: 0;
-  top: 5rem;
-  height: calc(100vh - 5rem);
+  top: 4.5rem;
+  height: calc(100vh - 4.5rem);
   width: 24rem;
   background: var(--bg-card);
   backdrop-filter: blur(20px);
