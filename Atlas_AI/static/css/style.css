@@ -760,15 +760,26 @@ mark {
 /* Main Content */
 .main-content {
   flex: 1;
-  margin-left: 20rem;
-  transition: margin-left 0.3s ease;
+  margin-left: 20rem; /* Space for the sidebar */
+  margin-right: 0; /* Add a base margin-right */
+  transition: margin-left 0.3s ease, margin-right 0.3s ease; /* Add transition for smooth resizing */
   overflow-y: auto;
-  position: relative; /* Add this to create a stacking context for its children */
-   /* Give it a base z-index */
+  position: relative;
+}
+
+.main-content.chat-open {
+  margin-right: 24rem; /* Space for the chat panel */
 }
 
 .main-content.expanded {
   margin-left: 0;
+}
+
+/* Add a responsive rule for when both are closed on mobile */
+@media (max-width: 768px) {
+  .main-content.chat-open {
+    margin-right: 0; /* Chat panel takes up full width on mobile, so no margin is needed */
+  }
 }
 
 .content-container {
@@ -1788,7 +1799,6 @@ mark {
 .ql-toolbar {
   background: var(--bg-card) !important;
   border: 1px solid var(--border-primary) !important;
- 
   border-radius: 0.5rem !important; /* Inherit from rich-editor-toolbar */
   margin-bottom: 1.5rem; /* Space between toolbar and editor */
   padding: 0.75rem 1rem !important;

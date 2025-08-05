@@ -7,6 +7,7 @@ window.initChat = () => {
   const chatForm = document.getElementById("chatForm")
   const chatInput = document.getElementById("chatInput")
   const chatMessages = document.getElementById("chatMessages")
+  const mainContent = document.getElementById("mainContent");
 
   setupChatEventListeners()
   setupChatAnimations()
@@ -57,30 +58,32 @@ window.initChat = () => {
   }
 
   function toggleChat() {
-    console.log("Toggling chat, current state:", window.AtlasAI.chatOpen)
-    window.AtlasAI.chatOpen = !window.AtlasAI.chatOpen
+    console.log("Toggling chat, current state:", window.AtlasAI.chatOpen);
+    window.AtlasAI.chatOpen = !window.AtlasAI.chatOpen;
 
     if (window.AtlasAI.chatOpen) {
-      chatPanel?.classList.add("open")
+      chatPanel?.classList.add("open");
+      mainContent?.classList.add("chat-open"); // Add the new class
       if (window.AtlasAI.isMobile) {
-        overlay?.classList.add("visible")
-        document.body.style.overflow = "hidden"
+        overlay?.classList.add("visible");
+        document.body.style.overflow = "hidden";
       }
       // Focus chat input
-      setTimeout(() => chatInput?.focus(), 300)
+      setTimeout(() => chatInput?.focus(), 300);
     } else {
-      closeChat()
+      closeChat();
     }
 
-    console.log("Chat toggled, new state:", window.AtlasAI.chatOpen)
+    console.log("Chat toggled, new state:", window.AtlasAI.chatOpen);
   }
 
   function closeChat() {
-    window.AtlasAI.chatOpen = false
-    chatPanel?.classList.remove("open")
+    window.AtlasAI.chatOpen = false;
+    chatPanel?.classList.remove("open");
+    mainContent?.classList.remove("chat-open"); // Remove the new class
     if (window.AtlasAI.isMobile) {
-      overlay?.classList.remove("visible")
-      document.body.style.overflow = "auto"
+      overlay?.classList.remove("visible");
+      document.body.style.overflow = "auto";
     }
   }
 

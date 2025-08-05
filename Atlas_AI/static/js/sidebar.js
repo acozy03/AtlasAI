@@ -58,21 +58,25 @@ window.initSidebar = () => {
     }
   }
 
-  function setupResponsive() {
-    window.AtlasAI.isMobile = window.innerWidth < 768
+function setupResponsive() {
+    window.AtlasAI.isMobile = window.innerWidth < 768;
 
     // If switching to mobile, ensure sidebar is collapsed
     if (window.AtlasAI.isMobile) {
-      window.AtlasAI.sidebarOpen = false
-      sidebar?.classList.add("collapsed")
-      mainContent?.classList.add("expanded")
+        window.AtlasAI.sidebarOpen = false;
+        sidebar?.classList.add("collapsed");
+        mainContent?.classList.add("expanded");
+        // NEW: Also close chat on mobile if it was open
+        if (window.AtlasAI.chatOpen) {
+            window.closeChat();
+        }
     } else {
-      // If switching to desktop, ensure sidebar is open by default
-      window.AtlasAI.sidebarOpen = true;
-      sidebar?.classList.remove("collapsed");
-      mainContent?.classList.remove("expanded");
+        // If switching to desktop, ensure sidebar is open by default
+        window.AtlasAI.sidebarOpen = true;
+        sidebar?.classList.remove("collapsed");
+        mainContent?.classList.remove("expanded");
     }
-  }
+}
 
   function toggleSidebar() {
     console.log("Toggling sidebar, current state:", window.AtlasAI.sidebarOpen)
