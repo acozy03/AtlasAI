@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
 from supabase import create_client, Client
 from datetime import datetime
 import os
@@ -7,13 +7,14 @@ import re
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 import logging # Keep logging for debugging
-import collections
+from functools import wraps
 from openai import OpenAI
 import requests
+import openai
 
 load_dotenv()
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-here'
+app.config['SECRET_KEY'] = 'your_secret_key_here'  # Set a strong secret key for session management
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, # Set to INFO to see general flow, DEBUG for more detail
@@ -25,8 +26,69 @@ SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+@app.context_processor
+def inject_global_vars():
+    return {
+        'SUPABASE_URL': SUPABASE_URL,
+        'SUPABASE_KEY': SUPABASE_KEY
+    }
+
 # Set OpenAI API key
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+def refresh_supabase_session():
+    """Refresh Supabase session or force logout if invalid."""
+    if 'access_token' not in session or 'refresh_token' not in session:
+        raise Exception("Session missing access or refresh token.")
+
+    try:
+        supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+        logger.info("Refreshing Supabase session...")
+        session_response = supabase_client.auth.set_session(
+            session['access_token'],
+            session['refresh_token']
+        )
+
+        # Update the session with new tokens (v2: they change every time!)
+        session['access_token'] = session_response.session.access_token
+        session['refresh_token'] = session_response.session.refresh_token
+
+        return supabase_client.auth.get_user()
+
+    except Exception as e:
+        logger.warning(f"Supabase session refresh failed: {e}")
+        # This ensures the loop is broken by fully clearing session
+        session.clear()
+        raise
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session or not session.get('access_token'):
+            flash('Please log in to access this page.', 'info')
+            return redirect(url_for('login'))
+
+        try:
+            user_response = refresh_supabase_session()
+
+            if not user_response or not user_response.user:
+                raise Exception("User not found.")
+
+            user = user_response.user
+            session['user'] = {
+                'id': user.id,
+                'email': user.email,
+                'aud': user.aud,
+                'role': user.role,
+            }
+
+        except Exception:
+            flash('Your session has expired. Please log in again.', 'info')
+            return redirect(url_for('login'))
+
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Helper Functions
 def create_slug(title: str) -> str:
@@ -36,8 +98,6 @@ def create_slug(title: str) -> str:
     slug = re.sub(r'[-\s]+', '-', slug)
     logger.info(f"Generated slug: '{slug}'")
     return slug.strip('-')
-
-# REMOVED: html_to_plain_text function (no longer needed for Markdown)
 
 def split_into_chunks(text: str, max_chunk_size: int = 500) -> List[str]:
     """Split text into chunks for embedding"""
@@ -185,6 +245,102 @@ def search_pages_content(query: str, limit: int = 10) -> List[Dict[str, Any]]:
         logger.error(f"Error searching pages by content for query: '{query}'. Error: {e}", exc_info=True)
         return []
 
+
+@app.route('/api/chat', methods=['POST'])
+@login_required
+def chat():
+    logger.info("API: Received POST request for chat.")
+    data = request.get_json()
+    question = data.get('message', '')
+
+    if not question:
+        logger.warning("API: No question provided for chat. Returning 400.")
+        return jsonify({'error': 'No question provided'}), 400
+
+    logger.info(f"API: Chat question received: '{question}'")
+    try:
+        # Search for relevant chunks
+        relevant_chunks = search_similar_chunks(question, 5)
+        logger.info(f"API: Found {len(relevant_chunks)} relevant chunks for chat question.")
+
+        # Build context
+        context = "\n\n".join([
+            f"From '{chunk['page_title']}': {chunk['content_chunk']}"
+            for chunk in relevant_chunks
+        ])
+        logger.debug(f"API: Context built for LLM:\n{context}") # Use debug level for detailed context
+
+        # Define system_prompt HERE, after context is built
+        system_prompt = f"""You are AtlasAI, an intelligent assistant for our internal wiki system.
+Your role is to help users find information from our knowledge base and answer questions based on the wiki content.
+
+Context from relevant wiki pages:
+{context}
+
+Guidelines:
+- Answer questions based primarily on the provided context
+- If the context doesn't contain enough information, say so clearly
+- Always cite which wiki pages your information comes from
+- Be concise but thorough
+- If asked about something not in the wiki, suggest creating a new wiki page for it"""
+
+        # Generate response using OpenAI
+        logger.info("API: Calling OpenAI chat completions.")
+        response = openai.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": question}
+            ],
+            max_tokens=500,
+            temperature=0.7
+        )
+
+        answer = response.choices[0].message.content
+        logger.info(f"API: OpenAI response received. Answer length: {len(answer)}")
+
+        # Log the chat
+        chat_data = {
+            'id': str(uuid.uuid4()),
+            'question': question,
+            'response': answer,
+            'context_chunks': [chunk['id'] for chunk in relevant_chunks],
+            'created_at': datetime.utcnow().isoformat()
+        }
+        logger.info(f"API: Logging chat data to Supabase for question: '{question}'")
+        supabase.table('chat_logs').insert(chat_data).execute()
+        logger.info("API: Chat data logged successfully.")
+
+        return jsonify({
+            'response': answer,
+            'sources': list(set([chunk['page_title'] for chunk in relevant_chunks]))
+        })
+
+    except Exception as e:
+        logger.error(f"API: Chat error for question '{question}': {e}", exc_info=True)
+        return jsonify({'error': 'Failed to generate response'}), 500
+
+@app.route('/api/feedback', methods=['POST'])
+@login_required
+def feedback():
+    logger.info("API: Received POST request for feedback.")
+    data = request.get_json()
+    chat_id = data.get('chat_id')
+    is_helpful = data.get('helpful')
+
+    try:
+        if chat_id:
+            logger.info(f"API: Updating feedback for chat_id: '{chat_id}' to helpful: {is_helpful}")
+            supabase.table('chat_logs').update({'feedback': is_helpful}).eq('id', chat_id).execute()
+            logger.info("API: Feedback updated successfully.")
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        logger.error(f"API: Error saving feedback for chat_id '{chat_id}': {e}", exc_info=True)
+        return jsonify({'error': 'Failed to save feedback'}), 500
+    
+
 def get_all_pages() -> List[Dict[str, Any]]:
     """Get all wiki pages"""
     logger.info("Fetching all wiki pages.")
@@ -205,10 +361,10 @@ def get_page_by_slug(slug: str) -> Dict[str, Any] | None:
             logger.info(f"Page found by slug: '{slug}'")
         else:
             logger.info(f"Page not found by slug: '{slug}'")
-        return result.data if result.data else None
+        return result.data if result.data else []
     except Exception as e:
         logger.error(f"Error fetching page by slug: '{slug}'. Error: {e}", exc_info=True)
-        return None
+        return []
 
 def get_page_by_id(page_id: str) -> Dict[str, Any] | None:
     """Get a wiki page by ID"""
@@ -222,7 +378,7 @@ def get_page_by_id(page_id: str) -> Dict[str, Any] | None:
         return result.data if result.data else None
     except Exception as e:
         logger.error(f"Error fetching page by ID: '{page_id}'. Error: {e}", exc_info=True)
-        return None
+        return []
 
 def initialize_default_pages(): # Content is now Markdown again
     """Create default pages if none exist"""
@@ -339,6 +495,7 @@ def build_page_tree(pages: List[Dict]) -> List[Dict]:
 
 # Routes
 @app.route('/')
+@login_required
 def index():
     logger.info("Accessed index page.")
     pages = get_all_pages()
@@ -355,6 +512,7 @@ def index():
     return render_template('index.html', pages=page_tree, current_page=home_page)
 
 @app.route('/wiki/<slug>')
+@login_required
 def wiki_page(slug):
     logger.info(f"Accessed wiki page with slug: '{slug}'")
     pages = get_all_pages()
@@ -372,6 +530,7 @@ def wiki_page(slug):
     return render_template('index.html', pages=page_tree, current_page=current_page)
 
 @app.route('/create', methods=['GET', 'POST'])
+@login_required
 def create_page():
     if request.method == 'POST':
         logger.info("Received POST request to create a page.")
@@ -423,6 +582,7 @@ def create_page():
     return render_template('create_page.html', pages=pages)
 
 @app.route('/edit/<slug>', methods=['GET', 'POST'])
+@login_required
 def edit_page(slug):
     logger.info(f"Accessed edit page for slug: '{slug}'")
     page = get_page_by_slug(slug)
@@ -461,7 +621,13 @@ def edit_page(slug):
     pages = get_all_pages()
     return render_template('edit_page.html', page=page, pages=pages)
 
+@app.route('/post-auth')
+def post_auth():
+    return render_template('post_auth.html')
+
+
 @app.route('/delete/<slug>', methods=['POST'])
+@login_required
 def delete_page(slug):
     logger.info(f"Received POST request to delete page with slug: '{slug}'")
     page = get_page_by_slug(slug)
@@ -485,6 +651,7 @@ def delete_page(slug):
 
 # API Routes
 @app.route('/api/update/<slug>', methods=['PUT'])
+@login_required
 def update_page_inline(slug):
     """Update a page via inline editing"""
     logger.info(f"Received PUT request for inline update of slug: {slug}")
@@ -539,6 +706,7 @@ def update_page_inline(slug):
         return jsonify({'error': f'Failed to update page: {str(e)}'}), 500
 
 @app.route('/api/page-by-slug/<slug>')
+@login_required
 def get_page_by_slug_api(slug):
     """Get page data by slug for API calls"""
     logger.info(f"API: Fetching page data by slug: '{slug}'")
@@ -549,99 +717,66 @@ def get_page_by_slug_api(slug):
     logger.info(f"API: Returning page data for slug: '{slug}'")
     return jsonify(page)
 
-@app.route('/api/chat', methods=['POST'])
-def chat():
-    logger.info("API: Received POST request for chat.")
-    data = request.get_json()
-    question = data.get('message', '')
+# NEW: The login route for unauthenticated users
+@app.route('/login')
+def login():
+    return render_template('login.html')
 
-    if not question:
-        logger.warning("API: No question provided for chat. Returning 400.")
-        return jsonify({'error': 'No question provided'}), 400
+@app.route('/api/auth/check')
+def auth_check():
+    """Check if the user is authenticated"""
+    return jsonify({'isAuthenticated': 'user' in session})
 
-    logger.info(f"API: Chat question received: '{question}'")
+# app.py (updated auth_callback function)
+
+@app.route('/api/auth/callback')
+def auth_callback():
+    logger.info("API: Received auth callback from Supabase.")
+    logger.info(f"Request URL: {request.url}")
+    logger.info(f"Access token: {request.args.get('access_token')}")
+    logger.info(f"Refresh token: {request.args.get('refresh_token')}")
+    
+    access_token = request.args.get('access_token')
+    refresh_token = request.args.get('refresh_token')
+
+    if not access_token or not refresh_token:
+        flash('Missing access or refresh token', 'error')
+        return redirect(url_for('login'))
+
     try:
-        # Search for relevant chunks
-        relevant_chunks = search_similar_chunks(question, 5)
-        logger.info(f"API: Found {len(relevant_chunks)} relevant chunks for chat question.")
+        logger.info(f"Calling set_session with:\n  access_token: {access_token}\n  refresh_token: {refresh_token}")
+        logger.info(f"Type of access_token: {type(access_token)}")
+        logger.info(f"Type of refresh_token: {type(refresh_token)}")
 
-        # Build context
-        context = "\n\n".join([
-            f"From '{chunk['page_title']}': {chunk['content_chunk']}"
-            for chunk in relevant_chunks
-        ])
-        logger.debug(f"API: Context built for LLM:\n{context}") # Use debug level for detailed context
+        supabase.auth.set_session(access_token, refresh_token)
+        user_response = supabase.auth.get_user()
 
-        # Define system_prompt HERE, after context is built
-        system_prompt = f"""You are AtlasAI, an intelligent assistant for our internal wiki system.
-Your role is to help users find information from our knowledge base and answer questions based on the wiki content.
+        if not user_response or not user_response.user:
+            raise Exception("Failed to retrieve user info from Supabase.")
 
-Context from relevant wiki pages:
-{context}
-
-Guidelines:
-- Answer questions based primarily on the provided context
-- If the context doesn't contain enough information, say so clearly
-- Always cite which wiki pages your information comes from
-- Be concise but thorough
-- If asked about something not in the wiki, suggest creating a new wiki page for it"""
-
-        # Generate response using OpenAI
-        logger.info("API: Calling OpenAI chat completions.")
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": question}
-            ],
-            max_tokens=500,
-            temperature=0.7
-        )
-
-        answer = response.choices[0].message.content
-        logger.info(f"API: OpenAI response received. Answer length: {len(answer)}")
-
-        # Log the chat
-        chat_data = {
-            'id': str(uuid.uuid4()),
-            'question': question,
-            'response': answer,
-            'context_chunks': [chunk['id'] for chunk in relevant_chunks],
-            'created_at': datetime.utcnow().isoformat()
+        user = user_response.user
+        session.clear()  
+        session['access_token'] = access_token
+        session['refresh_token'] = refresh_token
+        session['user'] = {
+            'id': user.id,
+            'email': user.email,
+            'aud': user.aud,
+            'role': user.role,
         }
-        logger.info(f"API: Logging chat data to Supabase for question: '{question}'")
-        supabase.table('chat_logs').insert(chat_data).execute()
-        logger.info("API: Chat data logged successfully.")
 
-        return jsonify({
-            'response': answer,
-            'sources': list(set([chunk['page_title'] for chunk in relevant_chunks]))
-        })
+        logger.info(f"User logged in: {user.email}")
+        flash('Login successful!', 'success')
+        return redirect(url_for('index'))
 
     except Exception as e:
-        logger.error(f"API: Chat error for question '{question}': {e}", exc_info=True)
-        return jsonify({'error': 'Failed to generate response'}), 500
+        logger.error(f"Authentication failed: {e}", exc_info=True)
+        flash(f"Authentication failed: {str(e)}", 'error')
+        return redirect(url_for('login'))
 
-@app.route('/api/feedback', methods=['POST'])
-def feedback():
-    logger.info("API: Received POST request for feedback.")
-    data = request.get_json()
-    chat_id = data.get('chat_id')
-    is_helpful = data.get('helpful')
-
-    try:
-        if chat_id:
-            logger.info(f"API: Updating feedback for chat_id: '{chat_id}' to helpful: {is_helpful}")
-            supabase.table('chat_logs').update({'feedback': is_helpful}).eq('id', chat_id).execute()
-            logger.info("API: Feedback updated successfully.")
-
-        return jsonify({'success': True})
-
-    except Exception as e:
-        logger.error(f"API: Error saving feedback for chat_id '{chat_id}': {e}", exc_info=True)
-        return jsonify({'error': 'Failed to save feedback'}), 500
 
 @app.route('/api/wiki', methods=['GET', 'POST'])
+@login_required
 def wiki_api():
     if request.method == 'GET':
         logger.info("API: Received GET request for wiki pages.")
@@ -695,8 +830,21 @@ def wiki_api():
         except Exception as e:
             logger.error(f"API: Error creating wiki page via API: {e}", exc_info=True)
             return jsonify({'error': str(e)}), 500
+        
+@app.route('/api/auth/logout', methods=['POST'])
+def auth_logout():
+    """Log the user out"""
+    try:
+        session.pop('user', None)
+        session.pop('access_token', None)
+        logger.info("User logged out successfully.")
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Logout failed: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/upload-file', methods=['POST'])
+@login_required
 def upload_file():
     logger.info("API: Received POST request for file upload.")
     uploaded_file = request.files.get('file')
@@ -706,17 +854,24 @@ def upload_file():
         return jsonify({'error': 'No file provided'}), 400
 
     try:
-        # Create a unique filename to prevent collisions
-        filename = f"wiki-files/{uuid.uuid4()}-{uploaded_file.filename}"
+        # Create a unique filename to prevent collisions, within a subfolder
+        filename = f"wiki-images/{uuid.uuid4()}-{uploaded_file.filename}"
         file_bytes = uploaded_file.read()
 
-        # Upload the file to your private Supabase Storage bucket
-        # Make sure to replace 'your-bucket-name' with the name you created
-        supabase.storage.from_('wiki-files').upload(filename, file_bytes, {"content-type": uploaded_file.content_type})
+        # Upload the file to your private Supabase Storage bucket 'wiki-files'
+        result = supabase.storage.from_('wiki-files').upload(filename, file_bytes, {"content-type": uploaded_file.content_type})
+
+        # Check for an error key in the dictionary response
+        if 'error' in result:
+            raise Exception(result['error'].get('message'))
 
         # Generate a signed URL for temporary access (e.g., 60 seconds)
         signed_url_response = supabase.storage.from_('wiki-files').create_signed_url(filename, 60)
+        
+        if 'error' in signed_url_response:
+            raise Exception(signed_url_response['error'].get('message'))
 
+        # Access the signedURL key directly from the dictionary response
         signed_url = signed_url_response['signedURL']
 
         logger.info(f"API: File uploaded successfully. Signed URL generated: {signed_url}")
@@ -727,6 +882,7 @@ def upload_file():
         return jsonify({'error': f'Failed to upload file: {str(e)}'}), 500
 
 @app.route('/api/search')
+@login_required
 def search_api():
     """Global search API endpoint"""
     logger.info("API: Received GET request for global search.")

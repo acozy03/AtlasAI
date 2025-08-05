@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Login - AtlasAI{% endblock %}
+
+{% block content %}
+<div class="welcome-screen">
+    <div class="welcome-content">
+        
+        <h2 class="welcome-title">Authentication Required</h2>
+        <p class="welcome-text">
+            Please sign in to access your knowledge base.
+        </p>
+        <button id="loginButton" class="btn btn-secondary btn-large" onclick="loginWithGoogle()">
+            <i class="fab fa-google"></i>
+            <span>Sign in with Google</span>
+        </button>
+    </div>
+</div>
+{% endblock %}

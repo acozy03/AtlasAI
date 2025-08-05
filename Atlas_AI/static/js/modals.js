@@ -159,12 +159,10 @@ window.initModals = () => {
       modal.innerHTML = `
         <div class="modal-content">
           <div class="modal-header">
-            <div class="modal-icon">
-              <i class="fas fa-plus"></i>
-            </div>
+       
             <div>
               <h3>Create New Page</h3>
-              <p class="modal-subtitle">${parentTitle ? `Creating a child page under: ${parentTitle}` : "Add a new page to your knowledge base"}</p>
+              <p class="modal-subtitle">${parentTitle ? `Creating a child page under: ${parentTitle}` : ""}</p>
             </div>
             <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
               <i class="fas fa-times"></i>
@@ -188,10 +186,7 @@ window.initModals = () => {
               `
                   : `<input type="hidden" name="parent_id" value="${parentId}">`
               }
-              <div class="form-group">
-                <label for="pageContent">Initial Content (Optional)</label>
-                <textarea id="pageContent" name="content" rows="6" placeholder="Write some initial content..."></textarea>
-              </div>
+             
               <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
                 <button type="submit" class="btn btn-primary">Create Page</button>
@@ -202,6 +197,12 @@ window.initModals = () => {
       `
 
       document.body.appendChild(modal)
+
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) {
+          modal.remove()
+        }
+      })
 
       // Load pages for parent dropdown if not creating child page
       if (!parentId) {

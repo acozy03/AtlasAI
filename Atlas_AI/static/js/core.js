@@ -129,23 +129,29 @@ document.addEventListener("DOMContentLoaded", () => {
       const loginButton = document.getElementById("loginButton")
       const logoutButton = document.getElementById("logoutButton")
       const editButton = document.getElementById("editButton")
+      const createPageButton = document.getElementById("createPageButton")
+      const welcomeCreateButton = document.getElementById("welcomeCreateButton")
 
       // Only update if elements exist
-      if (loginButton && logoutButton && editButton) {
+      if (loginButton && logoutButton) {
         if (isAuthenticated) {
           loginButton.style.display = "none"
           logoutButton.style.display = "inline-block"
-          editButton.style.display = "inline-block"
         } else {
           loginButton.style.display = "inline-block"
           logoutButton.style.display = "none"
-          editButton.style.display = "none"
         }
-      } else {
-        // If auth buttons don't exist, just show edit button if it exists
-        if (editButton) {
-          editButton.style.display = "inline-block"
-        }
+      }
+
+      // Toggle edit and create buttons based on auth status
+      if (editButton) {
+        editButton.style.display = isAuthenticated ? "inline-block" : "none"
+      }
+      if (createPageButton) {
+        createPageButton.style.display = isAuthenticated ? "block" : "none"
+      }
+      if (welcomeCreateButton) {
+        welcomeCreateButton.style.display = isAuthenticated ? "block" : "none"
       }
     }
 
@@ -153,11 +159,9 @@ document.addEventListener("DOMContentLoaded", () => {
     checkAuthentication()
       .then(updateUI)
       .catch(() => {
-        // Fallback: just show edit button if it exists
-        const editButton = document.getElementById("editButton")
-        if (editButton) {
-          editButton.style.display = "inline-block"
-        }
+        // Fallback: just show login button if auth check fails
+        const loginButton = document.getElementById("loginButton");
+        if (loginButton) loginButton.style.display = "inline-block";
       })
 
     // Logout button event listener
@@ -176,15 +180,6 @@ document.addEventListener("DOMContentLoaded", () => {
             }
           })
           .catch((error) => console.error("Logout error:", error))
-      })
-    }
-
-    // Login button event listener
-    const loginButton = document.getElementById("loginButton")
-    if (loginButton) {
-      loginButton.addEventListener("click", (event) => {
-        event.preventDefault()
-        window.location.href = "/login"
       })
     }
   }

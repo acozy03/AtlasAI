@@ -84,7 +84,7 @@
                     <p class="welcome-text">
                         Select a page from the sidebar to get started, or create a new page to begin building your knowledge base.
                     </p>
-                    <button onclick="showCreatePageModal()" class="btn btn-primary btn-large">
+                    <button id="welcomeCreateButton" onclick="showCreatePageModal()" class="btn btn-primary btn-large">
                         <i class="fas fa-plus"></i>
                         <span>Create Your First Page</span>
                     </button>
@@ -96,22 +96,15 @@
     <aside id="chatPanel" class="chat-panel">
         <div class="chat-container">
             <div class="chat-header">
-                <div class="chat-title">
-                    <div class="chat-icon">
-                        <i class="fas fa-robot"></i>
-                    </div>
-                    <h3>AtlasAI Assistant</h3>
-                </div>
-                <button id="closeChatPanel" class="chat-close">
+               
+                <button id="closeChatPanel" class="chat-close style="display: none;">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             
             <div id="chatMessages" class="chat-messages">
                 <div class="welcome-message">
-                    <div class="bot-avatar">
-                        <i class="fas fa-robot"></i>
-                    </div>
+                    
                     <div class="welcome-text">
                         <h4>Ask me anything!</h4>
                         <p>I can help you find information and answer questions based on your knowledge base.</p>
@@ -157,5 +150,6 @@ document.addEventListener('showCreatePageModal', function() {
         window.showCreatePageModalFromSidebar();
     }
 });
+
 </script>
 {% endblock %}
