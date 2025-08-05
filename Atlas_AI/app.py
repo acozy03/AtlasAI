@@ -181,7 +181,7 @@ def search_similar_chunks(query: str, limit: int = 5) -> List[Dict[str, Any]]:
         logger.info(f"Calling Supabase RPC 'search_wiki_chunks' with threshold 0.7 and count {limit}")
         result = supabase.rpc('search_wiki_chunks', {
             'query_embedding': query_embedding,
-            'match_threshold': 0.3,
+            'match_threshold': 0.1,
             'match_count': limit
         }).execute()
 
@@ -279,7 +279,7 @@ Context from relevant wiki pages:
 
 Guidelines:
 - Answer questions based primarily on the provided context
-- If the context doesn't contain enough information, say so clearly
+- If the context doesn't contain enough information, try and interpret the question based on what you know
 - Always cite which wiki pages your information comes from
 - Be concise but thorough
 - If asked about something not in the wiki, suggest creating a new wiki page for it"""
@@ -293,7 +293,7 @@ Guidelines:
                 {"role": "user", "content": question}
             ],
             max_tokens=500,
-            temperature=0.7
+            temperature=0.8
         )
 
         answer = response.choices[0].message.content
@@ -862,8 +862,7 @@ def upload_file():
         result = supabase.storage.from_('wiki-files').upload(filename, file_bytes, {"content-type": uploaded_file.content_type})
 
         # Check for an error key in the dictionary response
-        if 'error' in result:
-            raise Exception(result['error'].get('message'))
+       
 
         # Generate a signed URL for temporary access (e.g., 60 seconds)
         signed_url_response = supabase.storage.from_('wiki-files').create_signed_url(filename, 60)
