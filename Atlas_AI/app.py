@@ -493,7 +493,6 @@ def build_page_tree(pages: List[Dict]) -> List[Dict]:
 
     return root_pages
 
-# Routes
 @app.route('/')
 @login_required
 def index():
@@ -502,14 +501,34 @@ def index():
 
     if not pages:
         initialize_default_pages()
-        pages = get_all_pages() # Re-fetch after initialization
+        pages = get_all_pages()
 
-    # Build hierarchical tree
     page_tree = build_page_tree(pages)
+    logger.debug(f"Page tree: {page_tree}")
 
-    home_page = next((p for p in pages if p['slug'] == 'home'), pages[0] if pages else None)
-    logger.info(f"Serving index page with current_page: {home_page['slug'] if home_page else 'None'}")
-    return render_template('index.html', pages=page_tree, current_page=home_page)
+    first_page = find_first_page(page_tree)
+
+    if first_page:
+        logger.info(f"Redirecting to first page: {first_page['slug']}")
+        return redirect(url_for('wiki_page', slug=first_page['slug']))
+    else:
+        logger.warning("No pages found in hierarchy.")
+        return "No pages available", 404
+
+def find_first_page(tree):
+    for node in tree:
+        # If it's a full page dict, return it
+        if isinstance(node, dict) and 'slug' in node:
+            return node
+        # If using future structure with 'page' wrapper
+        elif isinstance(node, dict) and 'page' in node:
+            return node['page']
+        elif 'children' in node:
+            child = find_first_page(node['children'])
+            if child:
+                return child
+    return None
+
 
 @app.route('/wiki/<slug>')
 @login_required
@@ -860,10 +879,6 @@ def upload_file():
 
         # Upload the file to your private Supabase Storage bucket 'wiki-files'
         result = supabase.storage.from_('wiki-files').upload(filename, file_bytes, {"content-type": uploaded_file.content_type})
-
-        # Check for an error key in the dictionary response
-       
-
         # Generate a signed URL for temporary access (e.g., 60 seconds)
         signed_url_response = supabase.storage.from_('wiki-files').create_signed_url(filename, 60)
         
