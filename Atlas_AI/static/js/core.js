@@ -36,6 +36,23 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+    function setupUserMenu() {
+        const userMenuBtn = document.getElementById("userMenuBtn");
+        const userMenuDropdown = document.getElementById("userMenuDropdown");
+
+        if (userMenuBtn && userMenuDropdown) {
+            userMenuBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                userMenuDropdown.classList.toggle("show");
+            });
+
+            document.addEventListener("click", (e) => {
+                if (!userMenuBtn.contains(e.target) && !userMenuDropdown.contains(e.target)) {
+                    userMenuDropdown.classList.remove("show");
+                }
+            });
+        }
+      } 
   // Initialize all modules
   init()
 
@@ -44,7 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Initialize authentication (optional - won't break if API doesn't exist)
     initAuth()
-
+    setupUserMenu();
      if (window.Quill) { // <--- ADD THIS CHECK
       if (window.initEditing) window.initEditing();
     } else {
@@ -155,6 +172,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
+  
     // Initial check and UI update
     checkAuthentication()
       .then(updateUI)

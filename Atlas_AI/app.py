@@ -30,7 +30,8 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 def inject_global_vars():
     return {
         'SUPABASE_URL': SUPABASE_URL,
-        'SUPABASE_KEY': SUPABASE_KEY
+        'SUPABASE_KEY': SUPABASE_KEY,
+        'session': session,  
     }
 
 # Set OpenAI API key
@@ -81,6 +82,7 @@ def login_required(f):
                 'email': user.email,
                 'aud': user.aud,
                 'role': user.role,
+                'user_metadata': user.user_metadata, # ADD THIS LINE
             }
 
         except Exception:
@@ -805,6 +807,7 @@ def auth_callback():
             'email': user.email,
             'aud': user.aud,
             'role': user.role,
+            'user_metadata': user.user_metadata or {}
         }
 
         logger.info(f"User logged in: {user.email}")
