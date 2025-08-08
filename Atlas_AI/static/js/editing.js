@@ -46,18 +46,13 @@ window.initEditing = () => {
     if (pageTitle) {
       pageTitle.addEventListener("click", () => {
         if (!window.AtlasAI.isEditing) {
+          console.log("Title clicked, entering edit mode")
           enterEditMode()
         }
         pageTitle.contentEditable = "true"
         pageTitle.focus()
       })
 
-      pageTitle.addEventListener("blur", () => {
-        pageTitle.contentEditable = "false"
-        if (window.AtlasAI.hasUnsavedChanges) {
-          window.savePageChanges()
-        }
-      })
 
       pageTitle.addEventListener("input", () => {
         window.AtlasAI.hasUnsavedChanges = true
@@ -509,7 +504,7 @@ window.initEditing = () => {
         window.AtlasAI.originalTitle = newTitle
         window.AtlasAI.originalContent = newContent
         window.AtlasAI.hasUnsavedChanges = false
-
+        
         if (pageContent) {
           pageContent.setAttribute("data-original-content", newContent)
         }

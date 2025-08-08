@@ -37,29 +37,26 @@ def inject_global_vars():
 # Set OpenAI API key
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-def refresh_supabase_session():
-    """Refresh Supabase session or force logout if invalid."""
-    if 'access_token' not in session or 'refresh_token' not in session:
-        raise Exception("Session missing access or refresh token.")
-
+def refresh_supabase_session(refresh_token: str) -> dict:
+    """Refreshes the Supabase session using the refresh token."""
     try:
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        logger.info("Attempting to refresh Supabase session...")
 
-        logger.info("Refreshing Supabase session...")
-        session_response = supabase_client.auth.set_session(
-            session['access_token'],
-            session['refresh_token']
-        )
+        # Directly call the refresh method with the refresh token
+        session_response = supabase_client.auth.refresh_session(refresh_token)
 
-        # Update the session with new tokens (v2: they change every time!)
-        session['access_token'] = session_response.session.access_token
-        session['refresh_token'] = session_response.session.refresh_token
+        if not session_response or not session_response.session:
+            raise Exception("Session refresh failed.")
 
-        return supabase_client.auth.get_user()
+        # Return the new session data
+        return {
+            'access_token': session_response.session.access_token,
+            'refresh_token': session_response.session.refresh_token
+        }
 
     except Exception as e:
         logger.warning(f"Supabase session refresh failed: {e}")
-        # This ensures the loop is broken by fully clearing session
         session.clear()
         raise
 
@@ -68,25 +65,6 @@ def login_required(f):
     def decorated_function(*args, **kwargs):
         if 'user' not in session or not session.get('access_token'):
             flash('Please log in to access this page.', 'info')
-            return redirect(url_for('login'))
-
-        try:
-            user_response = refresh_supabase_session()
-
-            if not user_response or not user_response.user:
-                raise Exception("User not found.")
-
-            user = user_response.user
-            session['user'] = {
-                'id': user.id,
-                'email': user.email,
-                'aud': user.aud,
-                'role': user.role,
-                'user_metadata': user.user_metadata, # ADD THIS LINE
-            }
-
-        except Exception:
-            flash('Your session has expired. Please log in again.', 'info')
             return redirect(url_for('login'))
 
         return f(*args, **kwargs)
@@ -121,7 +99,7 @@ def split_into_chunks(text: str, max_chunk_size: int = 500) -> List[str]:
     logger.info(f"Generated {len(chunks)} chunks.")
     return [chunk for chunk in chunks if chunk]
 
-def generate_embeddings(page_id: str, content: str): # Content is now expected to be Markdown
+def generate_embeddings(page_id: str, content: str):
     """Generate embeddings for page content (Markdown)."""
     logger.info(f"Attempting to generate embeddings for page_id: {page_id}")
     if not content.strip():
@@ -134,7 +112,6 @@ def generate_embeddings(page_id: str, content: str): # Content is now expected t
         supabase.table('wiki_chunks').delete().eq('page_id', page_id).execute()
         logger.info(f"Existing chunks deleted for page_id: {page_id}")
 
-        # Split Markdown content directly into chunks
         chunks = split_into_chunks(content)
 
         for i, chunk in enumerate(chunks):
@@ -144,13 +121,18 @@ def generate_embeddings(page_id: str, content: str): # Content is now expected t
 
             # Generate embedding
             logger.info(f"Generating embedding for chunk {i} of page_id: {page_id} (length: {len(chunk)})")
-            response = client.embeddings.create(
-                model="text-embedding-3-small",
-                input=chunk
-            )
-
-            embedding = response.data[0].embedding
-            logger.info(f"Embedding generated for chunk {i}.")
+            
+            # --- New check and logging for embedding generation ---
+            try:
+                response = client.embeddings.create(
+                    model="text-embedding-3-small",
+                    input=chunk
+                )
+                embedding = response.data[0].embedding
+                logger.info(f"Embedding generated for chunk {i}.")
+            except Exception as e:
+                logger.error(f"Failed to generate embedding for chunk {i}. Error: {e}", exc_info=True)
+                continue # Skip this chunk if embedding fails
 
             # Save chunk with embedding
             chunk_data = {
@@ -160,8 +142,13 @@ def generate_embeddings(page_id: str, content: str): # Content is now expected t
                 'token_count': len(chunk.split())
             }
 
-            supabase.table('wiki_chunks').insert(chunk_data).execute()
-            logger.info(f"Chunk {i} saved for page_id: {page_id}.")
+            # --- New check and logging for Supabase insert ---
+            try:
+                supabase.table('wiki_chunks').insert(chunk_data).execute()
+                logger.info(f"Chunk {i} saved for page_id: {page_id}.")
+            except Exception as e:
+                logger.error(f"Failed to save chunk {i} to Supabase. Error: {e}", exc_info=True)
+                continue # Skip this chunk if saving fails
 
     except Exception as e:
         logger.error(f"Error generating embeddings for page_id: {page_id}. Error: {e}", exc_info=True)
@@ -351,12 +338,23 @@ def feedback():
     
 
 def get_all_pages() -> List[Dict[str, Any]]:
-    """Get all wiki pages"""
-    logger.info("Fetching all wiki pages.")
+    """Get all wiki pages, using a session cache to avoid repeated DB calls."""
+    logger.info("Checking for cached wiki pages.")
+    # Check if page data is already in the session
+    if 'pages' in session and session['pages']:
+        logger.info("Found cached pages in session. Returning from cache.")
+        return session['pages']
+
+    logger.info("No cached pages found. Fetching all wiki pages from DB.")
     try:
         result = supabase.table('wiki_pages').select('*').order('sort_order').execute()
-        logger.info(f"Fetched {len(result.data)} wiki pages.")
-        return result.data if result.data else []
+        pages = result.data if result.data else []
+        logger.info(f"Fetched {len(pages)} wiki pages.")
+
+        # Store the fetched pages in the session for subsequent requests
+        session['pages'] = pages
+
+        return pages
     except Exception as e:
         logger.error(f"Error fetching all pages: {e}", exc_info=True)
         return []
@@ -609,6 +607,11 @@ def create_page():
             logger.info(f"Inserting new page: '{title}' with slug: '{slug}'")
             result = supabase.table('wiki_pages').insert(page_data).execute()
             logger.info(f"Page '{title}' inserted successfully.")
+            
+            # Clear the session cache to force a fresh fetch
+            if 'pages' in session:
+                del session['pages']
+                logger.info("Pages cache cleared from session.")
 
             if content:
                 generate_embeddings(page_data['id'], content)
@@ -651,6 +654,11 @@ def edit_page(slug):
             supabase.table('wiki_pages').update(update_data).eq('id', page['id']).execute()
             logger.info(f"Page '{page['title']}' updated successfully.")
 
+            # Clear the session cache to force a fresh fetch
+            if 'pages' in session:
+                del session['pages']
+                logger.info("Pages cache cleared from session.")
+
             if content:
                 generate_embeddings(page['id'], content)
 
@@ -685,6 +693,12 @@ def delete_page(slug):
         logger.info(f"Deleting page '{page['title']}' (ID: {page['id']}).")
         supabase.table('wiki_pages').delete().eq('id', page['id']).execute()
         logger.info(f"Page '{page['title']}' deleted successfully.")
+        
+        # Clear the session cache after a deletion to force a fresh fetch on the next request
+        if 'pages' in session:
+            del session['pages']
+            logger.info("Pages cache cleared from session.")
+
         flash('Page deleted successfully!', 'success')
 
     except Exception as e:
@@ -730,6 +744,11 @@ def update_page_inline(slug):
         result = supabase.table('wiki_pages').update(update_data).eq('id', page['id']).execute()
         logger.info(f"Database update result for slug '{slug}': {result}")
 
+        # Clear the session cache to force a fresh fetch
+        if 'pages' in session:
+            del session['pages']
+            logger.info("Pages cache cleared from session.")
+
         if content != page.get('content', ''):
             try:
                 logger.info(f"Content changed for slug '{slug}'. Regenerating embeddings.")
@@ -737,7 +756,7 @@ def update_page_inline(slug):
                 logger.info(f"Embeddings regenerated successfully for slug '{slug}'.")
             except Exception as e:
                 logger.error(f"Error regenerating embeddings for slug '{slug}': {e}", exc_info=True)
-                # Don't fail the update if embeddings fail
+    
 
         return jsonify({
             'success': True,
@@ -761,7 +780,6 @@ def get_page_by_slug_api(slug):
     logger.info(f"API: Returning page data for slug: '{slug}'")
     return jsonify(page)
 
-# NEW: The login route for unauthenticated users
 @app.route('/login')
 def login():
     return render_template('login.html')
@@ -771,15 +789,9 @@ def auth_check():
     """Check if the user is authenticated"""
     return jsonify({'isAuthenticated': 'user' in session})
 
-# app.py (updated auth_callback function)
-
 @app.route('/api/auth/callback')
 def auth_callback():
     logger.info("API: Received auth callback from Supabase.")
-    logger.info(f"Request URL: {request.url}")
-    logger.info(f"Access token: {request.args.get('access_token')}")
-    logger.info(f"Refresh token: {request.args.get('refresh_token')}")
-    
     access_token = request.args.get('access_token')
     refresh_token = request.args.get('refresh_token')
 
@@ -788,10 +800,6 @@ def auth_callback():
         return redirect(url_for('login'))
 
     try:
-        logger.info(f"Calling set_session with:\n  access_token: {access_token}\n  refresh_token: {refresh_token}")
-        logger.info(f"Type of access_token: {type(access_token)}")
-        logger.info(f"Type of refresh_token: {type(refresh_token)}")
-
         supabase.auth.set_session(access_token, refresh_token)
         user_response = supabase.auth.get_user()
 
@@ -799,7 +807,7 @@ def auth_callback():
             raise Exception("Failed to retrieve user info from Supabase.")
 
         user = user_response.user
-        session.clear()  
+        session.clear()
         session['access_token'] = access_token
         session['refresh_token'] = refresh_token
         session['user'] = {
@@ -867,6 +875,11 @@ def wiki_api():
             result = supabase.table('wiki_pages').insert(page_data).execute()
             logger.info(f"API: Wiki page '{title}' inserted via API successfully.")
 
+            # Clear the session cache to force a fresh fetch
+            if 'pages' in session:
+                del session['pages']
+                logger.info("Pages cache cleared from session.")
+
             if content:
                 generate_embeddings(page_data['id'], content)
 
@@ -880,13 +893,32 @@ def wiki_api():
 def auth_logout():
     """Log the user out"""
     try:
+        supabase.auth.sign_out()
         session.pop('user', None)
         session.pop('access_token', None)
+        session.pop('refresh_token', None)
         logger.info("User logged out successfully.")
         return jsonify({'success': True})
     except Exception as e:
         logger.error(f"Logout failed: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
+    
+@app.route('/api/auth/refresh', methods=['POST'])
+def auth_refresh():
+    """Client-side API endpoint to refresh the session token."""
+    data = request.get_json()
+    refresh_token = data.get('refresh_token')
+
+    if not refresh_token:
+        return jsonify({'error': 'No refresh token provided'}), 400
+
+    try:
+        new_session = refresh_supabase_session(refresh_token)
+        return jsonify(new_session)
+
+    except Exception as e:
+        logger.error(f"Failed to refresh token: {e}")
+        return jsonify({'error': 'Failed to refresh token'}), 401
 
 @app.route('/api/upload-file', methods=['POST'])
 @login_required
