@@ -630,7 +630,7 @@ def create_page():
 
 @app.route('/edit/<slug>', methods=['GET', 'POST'])
 @login_required
-def edit_page(slug):
+def edit_page(slug): 
     logger.info(f"Accessed edit page for slug: '{slug}'")
     page = get_page_by_slug(slug)
 
@@ -932,7 +932,7 @@ def upload_file():
 
     try:
         # Create a unique filename to prevent collisions, within a subfolder
-        filename = f"wiki-images/{uuid.uuid4()}-{uploaded_file.filename}"
+        filename = f"wiki-files/{uuid.uuid4()}-{uploaded_file.filename}"
         file_bytes = uploaded_file.read()
 
         # Upload the file to your private Supabase Storage bucket 'wiki-files'
