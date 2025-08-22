@@ -26,7 +26,7 @@ window.initSearch = () => {
     globalSearchInput.addEventListener("input", (e) => {
       clearTimeout(searchTimeout)
       const query = e.target.value.trim()
-
+  
       if (query.length < 2) {
         hideSearchResults()
         return
@@ -42,7 +42,7 @@ window.initSearch = () => {
         showSearchResults()
       }
     })
-
+  
     // Close search results when clicking outside
     document.addEventListener("click", (e) => {
       if (!e.target.closest(".global-search-container")) {

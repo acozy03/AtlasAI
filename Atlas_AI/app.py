@@ -67,6 +67,11 @@ def login_required(f):
             flash('Please log in to access this page.', 'info')
             return redirect(url_for('login'))
 
+        # Get and store user's domain if not already present
+        if 'email_domain' not in session and session['user'].get('email'):
+            session['email_domain'] = session['user']['email'].split('@')[1]
+            logging.info(f"Storing user's email domain: {session['email_domain']}")
+        
         return f(*args, **kwargs)
     return decorated_function
 
@@ -337,6 +342,7 @@ def feedback():
         return jsonify({'error': 'Failed to save feedback'}), 500
     
 
+# In app.py
 def get_all_pages() -> List[Dict[str, Any]]:
     """Get all wiki pages, using a session cache to avoid repeated DB calls."""
     logger.info("Checking for cached wiki pages.")
@@ -347,8 +353,17 @@ def get_all_pages() -> List[Dict[str, Any]]:
 
     logger.info("No cached pages found. Fetching all wiki pages from DB.")
     try:
-        result = supabase.table('wiki_pages').select('*').order('sort_order').execute()
-        pages = result.data if result.data else []
+        current_user_email = session['user']['email']
+        current_user_domain = session['email_domain']
+
+        # Combine the conditions into a single string
+        conditions = f'is_public.eq.true,creator_email.eq.{current_user_email},creator_email.like.%{current_user_domain}'
+
+        query = supabase.table('wiki_pages').select('*').or_(
+            conditions
+        ).order('sort_order').execute()
+
+        pages = query.data if query.data else []
         logger.info(f"Fetched {len(pages)} wiki pages.")
 
         # Store the fetched pages in the session for subsequent requests
@@ -360,18 +375,35 @@ def get_all_pages() -> List[Dict[str, Any]]:
         return []
 
 def get_page_by_slug(slug: str) -> Dict[str, Any] | None:
-    """Get a wiki page by slug"""
     logger.info(f"Fetching page by slug: '{slug}'")
     try:
+        current_user_email = session['user']['email']
+        current_user_domain = session['email_domain']
+
         result = supabase.table('wiki_pages').select('*').eq('slug', slug).single().execute()
-        if result.data:
-            logger.info(f"Page found by slug: '{slug}'")
+        page = result.data
+
+        if not page:
+            return None
+        
+        # Permission check: is it public, or does the user have the right domain?
+        page_is_public = page.get('is_public', False)
+        creator_email = page.get('creator_email', '')
+        creator_domain = creator_email.split('@')[1] if '@' in creator_email else None
+        
+        has_permission = page_is_public or \
+                         current_user_email == creator_email or \
+                         current_user_domain == creator_domain
+
+        if has_permission:
+            return page
         else:
-            logger.info(f"Page not found by slug: '{slug}'")
-        return result.data if result.data else []
+            logger.warning(f"User {current_user_email} attempted to access private page '{slug}'. Permission denied.")
+            return None # No permission, return None
+            
     except Exception as e:
         logger.error(f"Error fetching page by slug: '{slug}'. Error: {e}", exc_info=True)
-        return []
+        return None
 
 def get_page_by_id(page_id: str) -> Dict[str, Any] | None:
     """Get a wiki page by ID"""
@@ -846,8 +878,9 @@ def wiki_api():
         try:
             data = request.get_json()
             title = data.get('title')
-            content = data.get('content', '') # Content is Markdown
+            content = data.get('content', '')
             parent_id = data.get('parent_id')
+            is_public = data.get('is_public', True)
 
             if not title:
                 logger.warning("API: Title missing for API page creation. Returning 400.")
@@ -867,6 +900,8 @@ def wiki_api():
                 'slug': slug,
                 'content': content,
                 'parent_id': parent_id,
+                'is_public': is_public, 
+                'creator_email': session['user']['email'], 
                 'created_at': datetime.utcnow().isoformat(),
                 'updated_at': datetime.utcnow().isoformat()
             }

@@ -24,10 +24,14 @@
                             <a href="{{ url_for('wiki_page', slug=page.slug) }}" 
                                class="page-link {% if current_page and current_page.id == page.id %}active{% endif %}">
                                 {# The toggle button will be injected here by JavaScript #}
-                                <div class="page-link-content"> {# New wrapper for text and icon #}
-                                    {# Removed the page icon here #}
-                                    <span>{{ page.title }}</span>
-                                </div>
+                               <div class="page-link-content">
+    {% if page.is_public %}
+        <i class="fas fa-globe-americas" title="Public Page"></i>
+    {% else %}
+        <i class="fas fa-lock" title="Private Page"></i>
+    {% endif %}
+    <span>{{ page.title }}</span>
+</div>
                                 {# Page menu for actions (will be populated by JS) #}
                             </a>
                             
@@ -97,7 +101,7 @@
         <div class="chat-container">
             <div class="chat-header">
                
-                <button id="closeChatPanel" class="chat-close style="display: none;">
+                <button id="closeChatPanel" class="chat-close">
                     <i class="fas fa-times"></i>
                 </button>
             </div>

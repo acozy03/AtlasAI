@@ -151,8 +151,7 @@ window.initModals = () => {
     }
   }
 
-  function setupCreatePageModal() {
-    // Show create page modal
+function setupCreatePageModal() {
     window.showCreatePageModal = (parentId = null, parentTitle = null) => {
       const modal = document.createElement("div")
       modal.className = "modal-overlay"
@@ -174,6 +173,15 @@ window.initModals = () => {
                 <label for="pageTitle">Page Title</label>
                 <input type="text" id="pageTitle" name="title" required placeholder="Enter page title...">
               </div>
+              
+              <div class="form-group">
+                <label for="pageVisibility">Page Visibility</label>
+                <select id="pageVisibility" name="is_public">
+                    <option value="true" selected>Public (visible to everyone in your company)</option>
+                    <option value="false">Private (visible only to you)</option>
+                </select>
+              </div>
+
               ${
                 !parentId
                   ? `
@@ -220,6 +228,7 @@ window.initModals = () => {
         const title = formData.get("title")
         const content = formData.get("content")
         const parent_id = formData.get("parent_id") || null
+        const is_public = formData.get("is_public") === "true"
 
         try {
           const response = await fetch("/api/wiki", {
@@ -229,6 +238,7 @@ window.initModals = () => {
               title,
               content,
               parent_id,
+              is_public,
             }),
           })
 

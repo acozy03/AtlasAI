@@ -140,14 +140,6 @@ function convertHtmlToMarkdown(html) {
 
   let markdown = turndownService.turndown(html);
 
-  // Normalize output
-  // markdown = markdown
-  //   .replace(/\n{3,}/g, "\n\n") // Collapse 3+ newlines to 2
-  //   .replace(/(\n- .+)\n{2,}(\n- .+)/g, "$1\n$2")
-  //   .replace(/(\n1\. .+)\n{2,}(\n1\. .+)/g, "$1\n$2")
-  //   .replace(/ +/g, " ")
-  //   .trim();
-
   console.log("Output Markdown:", JSON.stringify(markdown));
   return markdown;
 }
