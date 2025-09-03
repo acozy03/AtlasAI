@@ -322,20 +322,26 @@ window.initEditing = () => {
                     
                     const data = await response.json();
                     
-                    if (data.url) {
-                      const range = this.quill.getSelection();
-                      
-                      // Check if the file is an image
-                      if (file.type.startsWith('image/')) {
-                        this.quill.insertEmbed(range.index, 'image', data.url);
-                      } else {
-                        // For other file types, insert a hyperlink
-                        const linkText = file.name;
-                        this.quill.insertText(range.index, linkText, 'link', data.url);
-                      }
-                    } else {
-                      console.error('File upload failed:', data.error);
-                    }
+                    
+const range = this.quill.getSelection();
+const fileUrl = `/api/file/${data.filename}`;
+
+if (file.type.startsWith('image/')) {
+    this.quill.insertEmbed(range.index, 'image', fileUrl);
+} else {
+    const linkText = file.name;
+    // Insert the text first, formatted as a link
+    this.quill.insertText(range.index, linkText, 'link', fileUrl);
+
+    // After insertion, get the link node to set the target attribute
+    const insertedRange = { index: range.index, length: linkText.length };
+    const linkNode = this.quill.getLeaf(insertedRange.index)[0].parent;
+    if (linkNode && linkNode.tagName === 'A') {
+        linkNode.setAttribute('target', '_blank');
+    }
+    // Move the cursor after the inserted text
+    this.quill.setSelection(insertedRange.index + insertedRange.length);
+}
                   } catch (error) {
                     console.error('Error during file upload:', error);
                   }

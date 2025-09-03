@@ -22,15 +22,21 @@ logging.basicConfig(level=logging.INFO, # Set to INFO to see general flow, DEBUG
 logger = logging.getLogger(__name__) # Use a logger instance
 
 # Supabase configuration
-SUPABASE_URL = os.getenv('SUPABASE_URL')
-SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SERVICE_KEY  = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+ANON_KEY     = os.environ["SUPABASE_ANON_KEY"]
 
+# Keep this name the same so you DON'T have to change all your code.
+supabase_service = create_client(SUPABASE_URL, SERVICE_KEY)
+
+# New: a separate user-scoped client for auth flows only.
+supabase_user = create_client(SUPABASE_URL, ANON_KEY)
+supabase = supabase_service
 @app.context_processor
 def inject_global_vars():
     return {
         'SUPABASE_URL': SUPABASE_URL,
-        'SUPABASE_KEY': SUPABASE_KEY,
+        'SUPABASE_KEY': ANON_KEY,
         'session': session,  
     }
 
@@ -38,27 +44,20 @@ def inject_global_vars():
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 def refresh_supabase_session(refresh_token: str) -> dict:
-    """Refreshes the Supabase session using the refresh token."""
     try:
-        supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
         logger.info("Attempting to refresh Supabase session...")
-
-        # Directly call the refresh method with the refresh token
-        session_response = supabase_client.auth.refresh_session(refresh_token)
-
+        session_response = supabase_user.auth.refresh_session(refresh_token)
         if not session_response or not session_response.session:
             raise Exception("Session refresh failed.")
-
-        # Return the new session data
         return {
             'access_token': session_response.session.access_token,
             'refresh_token': session_response.session.refresh_token
         }
-
     except Exception as e:
         logger.warning(f"Supabase session refresh failed: {e}")
         session.clear()
         raise
+
 
 def login_required(f):
     @wraps(f)
@@ -832,8 +831,8 @@ def auth_callback():
         return redirect(url_for('login'))
 
     try:
-        supabase.auth.set_session(access_token, refresh_token)
-        user_response = supabase.auth.get_user()
+        supabase_user.auth.set_session(access_token, refresh_token)
+        user_response = supabase_user.auth.get_user()
 
         if not user_response or not user_response.user:
             raise Exception("Failed to retrieve user info from Supabase.")
@@ -928,7 +927,7 @@ def wiki_api():
 def auth_logout():
     """Log the user out"""
     try:
-        supabase.auth.sign_out()
+        supabase_user.auth.sign_out()
         session.pop('user', None)
         session.pop('access_token', None)
         session.pop('refresh_token', None)
@@ -955,38 +954,92 @@ def auth_refresh():
         logger.error(f"Failed to refresh token: {e}")
         return jsonify({'error': 'Failed to refresh token'}), 401
 
+from werkzeug.utils import secure_filename
+
 @app.route('/api/upload-file', methods=['POST'])
 @login_required
 def upload_file():
     logger.info("API: Received POST request for file upload.")
     uploaded_file = request.files.get('file')
-
     if not uploaded_file:
-        logger.warning("API: No file provided in upload request.")
         return jsonify({'error': 'No file provided'}), 400
 
     try:
-        # Create a unique filename to prevent collisions, within a subfolder
-        filename = f"wiki-files/{uuid.uuid4()}-{uploaded_file.filename}"
+        safe_name = secure_filename(uploaded_file.filename)  # e.g. "Admin_Documentation_RadMapping.pdf"
+        key = f"{uuid.uuid4()}-{safe_name}"                  # e.g. "6fa9...-Admin_Documentation_RadMapping.pdf"
         file_bytes = uploaded_file.read()
 
-        # Upload the file to your private Supabase Storage bucket 'wiki-files'
-        result = supabase.storage.from_('wiki-files').upload(filename, file_bytes, {"content-type": uploaded_file.content_type})
-        # Generate a signed URL for temporary access (e.g., 60 seconds)
-        signed_url_response = supabase.storage.from_('wiki-files').create_signed_url(filename, 60)
-        
-        if 'error' in signed_url_response:
-            raise Exception(signed_url_response['error'].get('message'))
+        supabase_service.storage.from_('wiki-files').upload(
+            key,
+            file_bytes,
+            {"content-type": uploaded_file.content_type}
+        )
 
-        # Access the signedURL key directly from the dictionary response
-        signed_url = signed_url_response['signedURL']
-
-        logger.info(f"API: File uploaded successfully. Signed URL generated: {signed_url}")
-        return jsonify({'url': signed_url})
+        # (Optional) sign here, but most important is to return the canonical key:
+        return jsonify({
+            'filename': key,               # <--- IMPORTANT: just the bucket-relative key
+            # 'url': signed_url_if_you_want
+        }), 200
 
     except Exception as e:
-        logger.error(f"API: Error uploading file: {e}", exc_info=True)
-        return jsonify({'error': f'Failed to upload file: {str(e)}'}), 500
+        logger.exception("API: Error uploading file")
+        return jsonify({'error': f'Failed to upload file: {e}'}), 500
+
+
+from urllib.parse import unquote
+
+@app.route('/api/file/<path:filename>')
+@login_required
+def get_signed_url(filename):
+    """Dynamically generate and return a signed URL for a file."""
+    # 1) Normalize
+    orig = filename
+    key = unquote(orig).lstrip('/')  # accept encoded path, strip leading slash
+
+    # Strip accidental bucket prefix if present (back-compat links like /api/file/wiki-files/...)
+    if key.startswith('wiki-files/'):
+        key = key[len('wiki-files/'):]
+
+    def try_sign(obj_key: str):
+        resp = supabase_service.storage.from_('wiki-files').create_signed_url(obj_key, 60)
+        # storage3 returns a dict (raises on non-2xx); pull whichever field exists
+        return resp.get('signedURL') or resp.get('signed_url')
+
+    try:
+        # A) canonical (new) form
+        try:
+            signed = try_sign(key)
+            return redirect(signed)
+        except Exception:
+            logger.info("Sign failed for key=%s; trying fallbacks", key)
+
+        # B) legacy: objects stored under an internal 'wiki-files/' folder
+        try:
+            signed = try_sign(f"wiki-files/{key}")
+            return redirect(signed)
+        except Exception:
+            pass
+
+        # C) encoding mismatch fallbacks
+        if '%20' in key:
+            try:
+                signed = try_sign(key.replace('%20', ' '))
+                return redirect(signed)
+            except Exception:
+                pass
+        if ' ' in key:
+            try:
+                signed = try_sign(key.replace(' ', '%20'))
+                return redirect(signed)
+            except Exception:
+                pass
+
+        logger.error("Object not found after all attempts: %s", orig)
+        return jsonify({'error': 'Object not found'}), 404
+
+    except Exception as e:
+        logger.error(f"API: Error generating signed URL for {orig}: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to generate signed URL'}), 500
 
 @app.route('/api/search')
 @login_required

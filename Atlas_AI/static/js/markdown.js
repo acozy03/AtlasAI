@@ -30,6 +30,20 @@ function convertHtmlToMarkdown(html) {
     linkReferenceStyle: "full",
   });
 
+  // New rule to handle dynamic file links and preserve the target="_blank" attribute
+  turndownService.addRule("fileLinks", {
+    filter: (node) => node.nodeName === "A" && node.getAttribute("href")?.startsWith("/api/file/"),
+    replacement: (content, node) => {
+      const href = node.getAttribute("href");
+      const target = node.getAttribute("target");
+      if (target === "_blank") {
+        // Return Markdown with a custom title attribute to preserve the target
+        return `[${content}](${href} "target=_blank")`;
+      }
+      return `[${content}](${href})`;
+    },
+  });
+
   // Custom rule for handling Quill-style lists with indentation
   turndownService.addRule("quillList", {
     filter: "li",
