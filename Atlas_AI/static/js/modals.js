@@ -2,7 +2,7 @@
 window.initModals = () => {
   setupLinkModal()
   setupCreatePageModal()
-
+  setupEditPermissionsModal()  
   function setupLinkModal() {
     // Link modal functionality
     window.showLinkModal = () => {
@@ -150,6 +150,83 @@ window.initModals = () => {
       sectionGroup.style.display = type === "section" ? "block" : "none"
     }
   }
+
+// Add this new function to modals.js
+function setupEditPermissionsModal() {
+    window.showEditPermissionsModal = async (pageSlug) => {
+        // Fetch current page data including permissions
+        const response = await fetch(`/api/page-by-slug/${pageSlug}`);
+        if (!response.ok) {
+            alert("Error fetching page data.");
+            return;
+        }
+        const page = await response.json();
+
+        const editorEmails = page.editor_emails ? page.editor_emails.join(', ') : '';
+        const isPublicChecked = page.is_public ? 'checked' : '';
+
+        const modal = document.createElement("div");
+        modal.className = "modal-overlay";
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h3>Edit Page Settings</h3>
+                        <p class="modal-subtitle">Update editors and visibility for "${page.title}"</p>
+                    </div>
+                    <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="editPermissionsForm">
+                        <div class="form-group">
+                            <label for="editorEmails">Editor Emails (comma-separated)</label>
+                            <input type="text" id="editorEmails" class="form-input" value="${editorEmails}" placeholder="e.g., jane@company.com, joe@company.com">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Page Visibility</label>
+                            <div class="checkbox-container">
+                                <input type="checkbox" id="isPublic" ${isPublicChecked}>
+                                <label for="isPublic">Public Page</label>
+                            </div>
+                            <p class="form-help">Public pages are visible to everyone in the organization.</p>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        modal.querySelector("#editPermissionsForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const newEditorEmails = modal.querySelector("#editorEmails").value.split(',').map(email => email.trim()).filter(email => email);
+            const newIsPublic = modal.querySelector("#isPublic").checked;
+
+            const response = await fetch(`/api/update-permissions/${pageSlug}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    editor_emails: newEditorEmails,
+                    is_public: newIsPublic
+                }),
+            });
+
+            if (response.ok) {
+                modal.remove();
+                window.location.reload(); // Reload to reflect changes in UI
+            } else {
+                const errorData = await response.json();
+                alert(`Error: ${errorData.error}`);
+            }
+        });
+    };
+}
+
 
 function setupCreatePageModal() {
     window.showCreatePageModal = (parentId = null, parentTitle = null) => {

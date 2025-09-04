@@ -53,26 +53,35 @@
         </div>
     </aside>
 
-    <main id="mainContent" class="main-content">
+    <main id="mainContent" class="main-content" data-has-lock="{{ has_lock }}" data-can-edit="{{ 'True' if can_edit else 'False' }}">
         {% if current_page %}
             <div class="content-container">
                 <div class="page-header">
-                    <div class="page-info">
-                        <div class="title-container">
-                            <h1 id="pageTitle" class="page-title" contenteditable="false">{{ current_page.title }}</h1>
-                        </div>
-                        <div class="page-meta">
-                            <span class="meta-item">
-                                <i class="fas fa-calendar-plus"></i>
-                                <span>Created {{ current_page.created_at[:10] }}</span>
-                            </span>
-                            <span class="meta-item">
-                                <i class="fas fa-edit"></i>
-                                <span>Updated {{ current_page.updated_at[:10] }}</span>
-                            </span>
-                        </div>
-                    </div>
-                </div>
+    <div class="page-info">
+        <div class="title-container">
+            <h1 id="pageTitle" class="page-title" contenteditable="false">{{ current_page.title }}</h1>
+        </div>
+        
+        <div class="page-meta">
+            {% if current_page.locked_by %}
+                <span class="meta-item locked-status" title="This page is being edited by {{ current_page.locked_by }}">
+                    <i class="fas fa-lock"></i>
+                    <span>Locked by {{ current_page.locked_by_name }}</span>
+                </span>
+            {% else %}
+                <span class="meta-item">
+                    <i class="fas fa-calendar-plus"></i>
+                    <span>Created {{ current_page.created_at[:10] }}</span>
+                </span>
+                <span class="meta-item">
+                    <i class="fas fa-edit"></i>
+                    <span>Updated {{ current_page.updated_at[:10] }}</span>
+                </span>
+            {% endif %}
+        </div>
+    </div>
+    
+</div>
                 
                 <div class="page-content">
                     <div id="pageContent" class="content" data-original-content="{{ current_page.content }}">{{ current_page.content | replace('\n', '<br>') | safe }}</div>

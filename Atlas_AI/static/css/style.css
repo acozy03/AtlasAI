@@ -19,7 +19,14 @@
   --accent-red: #ef4444;
   --accent-orange: #f59e0b;
 }
+.locked-status {
+  color: var(--accent-orange);
+  font-weight: 500;
+}
 
+.locked-status i {
+  color: var(--accent-orange);
+}
 /* Reset and Base Styles */
 * {
   margin: 0;

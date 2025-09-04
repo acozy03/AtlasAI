@@ -43,16 +43,16 @@
 
     {% if session.user and session.user.get('user_metadata') %}
     <div class="user-menu-container">
-        <button id="userMenuBtn" class="user-avatar-btn">
-            <img src="{{ session.user.user_metadata.get('avatar_url') }}" alt="User Avatar" class="user-avatar">
-        </button>
-        <div id="userMenuDropdown" class="user-menu-dropdown">
-            <a href="#" class="user-menu-item" onclick="logout()">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Logout</span>
-            </a>
-        </div>
+    <button id="userMenuBtn" class="user-avatar-btn" data-user-email="{{ session.user.get('email') }}">
+        <img src="{{ session.user.user_metadata.get('avatar_url') }}" alt="User Avatar" class="user-avatar">
+    </button>
+    <div id="userMenuDropdown" class="user-menu-dropdown">
+        <a href="#" class="user-menu-item" onclick="logout()">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Logout</span>
+        </a>
     </div>
+</div>
     {% else %}
     <button id="logoutButton" class="nav-btn" style="display: none;" onclick="logout()">
         <i class="fas fa-sign-out-alt"></i>

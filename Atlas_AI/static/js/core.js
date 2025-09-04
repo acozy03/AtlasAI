@@ -56,12 +56,20 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize all modules
   init()
 
-  function init() {
+  async function init() {
     console.log("Initializing AtlasAI...")
 
     // Initialize authentication (optional - won't break if API doesn't exist)
     initAuth()
     setupUserMenu();
+
+     const userEmail = document.getElementById("userMenuBtn")?.dataset.userEmail;
+    if(userEmail) {
+      window.AtlasAI.currentUserEmail = userEmail; 
+    }
+
+    await loadAllPages(); 
+    
      if (window.Quill) { // <--- ADD THIS CHECK
       if (window.initEditing) window.initEditing();
     } else {
@@ -83,6 +91,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (window.initMarkdown) window.initMarkdown()
     if (window.initCollapsible) window.initCollapsible()
 
+   
     // Auto-hide flash messages
     setTimeout(() => {
       const flashMessages = document.querySelectorAll(".flash-message")
@@ -123,6 +132,17 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("AtlasAI initialized successfully!")
   }
 
+  async function loadAllPages() {
+    try {
+        const response = await fetch('/api/wiki');
+        const pages = await response.json();
+        window.AtlasAI.allPages = pages;
+        console.log("All pages loaded for sidebar permissions.");
+    } catch (error) {
+        console.error("Error loading all pages:", error);
+    }
+}
+
   function initAuth() {
     // Check if the user is authenticated
     function checkAuthentication() {
@@ -160,10 +180,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
-      // Toggle edit and create buttons based on auth status
+      const hasEditPermission = document.body.dataset.canEdit === 'True';
       if (editButton) {
-        editButton.style.display = isAuthenticated ? "inline-block" : "none"
+      if (isAuthenticated && hasEditPermission) {
+        editButton.style.display = "inline-block";
+      } else {
+        editButton.style.display = "none";
       }
+    }
       if (createPageButton) {
         createPageButton.style.display = isAuthenticated ? "block" : "none"
       }

@@ -41,7 +41,11 @@ window.initEditing = () => {
   setupInlineEditing()
 
   function setupInlineEditing() {
-
+    const mainContent = document.getElementById("mainContent"); 
+    const hasLock = mainContent.dataset.hasLock === 'True';
+    if (hasLock) {
+      enterEditMode(); 
+    } 
     // Title editing
     if (pageTitle) {
       pageTitle.addEventListener("click", () => {
@@ -68,6 +72,14 @@ window.initEditing = () => {
         if (e.target.closest(".section-toggle")) {
           return
         }
+
+        const lockedStatus = document.querySelector(".locked-status");
+        if (lockedStatus) {
+          alert("This page is currently locked for editing by another user.");
+          return;
+        }
+
+
         if (!window.AtlasAI.isEditing) {
           enterEditMode()
         }
@@ -130,24 +142,45 @@ window.initEditing = () => {
     console.log("Inline editing setup complete")
   }
 
-  function enterEditMode() {
+  async function enterEditMode() {
     if (window.AtlasAI.isEditing) return
 
     console.log("Entering edit mode...")
-    window.AtlasAI.isEditing = true
-    window.AtlasAI.hasUnsavedChanges = false
-    mainContent?.classList.add("edit-mode")
-
     window.AtlasAI.isEnteringEditMode = true
 
-    // Store original content
-    if (pageTitle) window.AtlasAI.originalTitle = pageTitle.textContent.trim()
-    if (pageContent) {
-      window.AtlasAI.originalContent = pageContent.getAttribute("data-original-content") || ""
-    }
+    try {
+      // 1. Attempt to acquire the page lock
+      const response = await fetch(`/api/lock/${window.AtlasAI.currentPageSlug}`, {
+        method: 'POST',
+      });
 
-    setupRichEditor()
-    console.log("Edit mode entered successfully")
+      if (response.status === 409) {
+        const data = await response.json();
+        alert(data.error);
+        window.AtlasAI.isEnteringEditMode = false;
+        return; // Stop here if lock fails
+      } else if (!response.ok) {
+        throw new Error('Failed to acquire lock');
+      }
+
+      // 2. If lock is successful, proceed with editing
+      window.AtlasAI.isEditing = true
+      window.AtlasAI.hasUnsavedChanges = false
+      mainContent?.classList.add("edit-mode")
+
+      // Store original content
+      if (pageTitle) window.AtlasAI.originalTitle = pageTitle.textContent.trim()
+      if (pageContent) {
+        window.AtlasAI.originalContent = pageContent.getAttribute("data-original-content") || ""
+      }
+
+      setupRichEditor()
+      console.log("Edit mode entered successfully")
+    } catch (error) {
+      console.error("Error entering edit mode:", error);
+      alert("You do not have editing permissions for this page or an error has occurred.");
+      window.AtlasAI.isEnteringEditMode = false;
+    }
   }
 
   function setupRichEditor() {
@@ -442,6 +475,15 @@ if (file.type.startsWith('image/')) {
       document.activeElement.blur()
     }
 
+    fetch(`/api/unlock/${window.AtlasAI.currentPageSlug}`, {
+      method: 'POST'
+    })
+    .then(response => {
+      if (!response.ok) {
+        console.error("Failed to unlock page on exit.");
+      }
+    })
+    .catch(error => console.error("Error unlocking page:", error));
     console.log("Edit mode exited")
   }
 

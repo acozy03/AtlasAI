@@ -358,9 +358,7 @@ def get_all_pages() -> List[Dict[str, Any]]:
         # Combine the conditions into a single string
         conditions = f'is_public.eq.true,creator_email.eq.{current_user_email},creator_email.like.%{current_user_domain}'
 
-        query = supabase.table('wiki_pages').select('*').or_(
-            conditions
-        ).order('sort_order').execute()
+        query = supabase.table('wiki_pages').select('*').order('sort_order').execute()
 
         pages = query.data if query.data else []
         logger.info(f"Fetched {len(pages)} wiki pages.")
@@ -373,13 +371,14 @@ def get_all_pages() -> List[Dict[str, Any]]:
         logger.error(f"Error fetching all pages: {e}", exc_info=True)
         return []
 
+
 def get_page_by_slug(slug: str) -> Dict[str, Any] | None:
     logger.info(f"Fetching page by slug: '{slug}'")
     try:
         current_user_email = session['user']['email']
         current_user_domain = session['email_domain']
 
-        result = supabase.table('wiki_pages').select('*').eq('slug', slug).single().execute()
+        result = supabase.table('wiki_pages').select('*, editor_emails').eq('slug', slug).single().execute()
         page = result.data
 
         if not page:
@@ -392,7 +391,8 @@ def get_page_by_slug(slug: str) -> Dict[str, Any] | None:
         
         has_permission = page_is_public or \
                          current_user_email == creator_email or \
-                         current_user_domain == creator_domain
+                         current_user_domain == creator_domain or \
+                         current_user_email in page.get('editor_emails', [])
 
         if has_permission:
             return page
@@ -404,6 +404,81 @@ def get_page_by_slug(slug: str) -> Dict[str, Any] | None:
         logger.error(f"Error fetching page by slug: '{slug}'. Error: {e}", exc_info=True)
         return None
 
+@app.route('/api/lock/<slug>', methods=['POST'])
+@login_required
+def lock_page(slug):
+    logger.info(f"API: Received lock request for slug: {slug}")
+    try:
+        user_id = session['user']['id']
+        user_email = session['user']['email']
+        username = session['user']['user_metadata'].get('full_name') or user_email
+
+        # First, check if the user has permission to edit this page at all
+        page_info = supabase.table('wiki_pages').select('is_public, editor_emails').eq('slug', slug).single().execute().data
+        
+        has_permission = user_email in page_info.get('editor_emails', [])
+        
+        if not has_permission:
+            logger.warning(f"User {user_email} attempted to lock page '{slug}' without edit permission.")
+            return jsonify({'error': 'You do not have permission to edit this page.'}), 403
+
+        # Check for existing lock
+        result = supabase.table('wiki_pages').select('locked_by, locked_at, locked_by_name').eq('slug', slug).single().execute()
+        current_lock = result.data
+
+        if current_lock['locked_by'] and current_lock['locked_by'] != user_id:
+            # Check if lock is stale (e.g., older than 15 minutes)
+            locked_at = datetime.fromisoformat(current_lock['locked_at'])
+            if (datetime.utcnow() - locked_at).total_seconds() > 900: # 15 minutes
+                logger.info("Stale lock found. Releasing and granting new lock.")
+                # Proceed to acquire new lock below
+            else:
+                logger.warning(f"Page '{slug}' is already locked by another user.")
+                return jsonify({
+                    'error': f'Page is currently being edited by {current_lock.get("locked_by_name", "another user")}.'
+                }), 409
+
+        # Acquire the lock
+        update_data = {
+            'locked_by': user_id,
+            'locked_at': datetime.utcnow().isoformat(),
+            'locked_by_name': username # Store a readable name for the frontend
+        }
+        supabase.table('wiki_pages').update(update_data).eq('slug', slug).execute()
+        logger.info(f"Page '{slug}' successfully locked by user '{username}'.")
+        return jsonify({'success': True, 'message': 'Page locked successfully'}), 200
+
+    except Exception as e:
+        logger.error(f"Error locking page '{slug}': {e}", exc_info=True)
+        return jsonify({'error': 'Failed to lock page'}), 500
+
+@app.route('/api/unlock/<slug>', methods=['POST'])
+@login_required
+def unlock_page(slug):
+    logger.info(f"API: Received unlock request for slug: {slug}")
+    try:
+        user_id = session['user']['id']
+        result = supabase.table('wiki_pages').select('locked_by').eq('slug', slug).single().execute()
+        current_lock_holder = result.data['locked_by']
+
+        if current_lock_holder != user_id:
+            logger.warning(f"User '{user_id}' attempted to unlock page '{slug}' but does not hold the lock.")
+            return jsonify({'error': 'You do not have permission to unlock this page.'}), 403
+
+        # Release the lock
+        update_data = {
+            'locked_by': None,
+            'locked_at': None,
+            'locked_by_name': None
+        }
+        supabase.table('wiki_pages').update(update_data).eq('slug', slug).execute()
+        logger.info(f"Page '{slug}' successfully unlocked.")
+        return jsonify({'success': True, 'message': 'Page unlocked successfully'}), 200
+
+    except Exception as e:
+        logger.error(f"Error unlocking page '{slug}': {e}", exc_info=True)
+        return jsonify({'error': 'Failed to unlock page'}), 500
+    
 def get_page_by_id(page_id: str) -> Dict[str, Any] | None:
     """Get a wiki page by ID"""
     logger.info(f"Fetching page by ID: '{page_id}'")
@@ -588,19 +663,62 @@ def find_first_page(tree):
 @login_required
 def wiki_page(slug):
     logger.info(f"Accessed wiki page with slug: '{slug}'")
-    pages = get_all_pages()
-    current_page = get_page_by_slug(slug)
+    
+    current_user_email = session['user']['email']
 
+    current_page = get_page_by_slug(slug)
+    
     if not current_page:
         logger.warning(f"Page not found for slug: '{slug}'. Redirecting to index.")
         flash('Page not found', 'error')
         return redirect(url_for('index'))
 
-    # Build hierarchical tree
+    pages = get_all_pages()
+    
+    can_edit = current_user_email in current_page.get('editor_emails', [])
+    has_lock = current_page.get('locked_by') == session['user']['id']
     page_tree = build_page_tree(pages)
 
     logger.info(f"Serving wiki page: '{current_page['title']}'")
-    return render_template('index.html', pages=page_tree, current_page=current_page)
+    return render_template('index.html', pages=page_tree, current_page=current_page, can_edit=can_edit, has_lock=has_lock)
+
+@app.route('/api/update-permissions/<slug>', methods=['PUT'])
+@login_required
+def update_page_permissions(slug):
+    logger.info(f"API: Received PUT request to update permissions for slug: {slug}")
+    try:
+        data = request.get_json()
+        new_editor_emails = data.get('editor_emails', [])
+        is_public = data.get('is_public', False)
+        
+        current_user_email = session['user']['email']
+        
+        # Verify the user has permission to change permissions
+        page_info = supabase.table('wiki_pages').select('editor_emails').eq('slug', slug).single().execute().data
+        
+        if current_user_email not in page_info.get('editor_emails', []):
+            logger.warning(f"User {current_user_email} attempted to change permissions for page '{slug}' without editor rights.")
+            return jsonify({'error': 'You do not have permission to change these settings.'}), 403
+
+        # Update the page with the new permissions
+        update_data = {
+            'editor_emails': new_editor_emails,
+            'is_public': is_public,
+            'updated_at': datetime.utcnow().isoformat()
+        }
+
+        supabase.table('wiki_pages').update(update_data).eq('slug', slug).execute()
+        
+        # Clear the session cache to force a fresh fetch with the new permissions
+        if 'pages' in session:
+            del session['pages']
+        
+        logger.info(f"Permissions for page '{slug}' updated successfully.")
+        return jsonify({'success': True, 'message': 'Permissions updated successfully'})
+
+    except Exception as e:
+        logger.error(f"API: Error updating permissions for slug '{slug}': {e}", exc_info=True)
+        return jsonify({'error': f'Failed to update permissions: {str(e)}'}), 500
 
 @app.route('/create', methods=['GET', 'POST'])
 @login_required
@@ -631,6 +749,7 @@ def create_page():
             'content': content,
             'parent_id': parent_id,
             'created_at': datetime.utcnow().isoformat(),
+            'editor_emails': [session['user']['email']],
             'updated_at': datetime.utcnow().isoformat()
         }
 
@@ -901,6 +1020,7 @@ def wiki_api():
                 'parent_id': parent_id,
                 'is_public': is_public, 
                 'creator_email': session['user']['email'], 
+                'editor_emails': [session['user']['email']],
                 'created_at': datetime.utcnow().isoformat(),
                 'updated_at': datetime.utcnow().isoformat()
             }

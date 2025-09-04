@@ -121,65 +121,84 @@ function setupResponsive() {
   // Setup sidebar menus with 3-dot options and create button
   function setupSidebarMenus() {
     // Add create page button to sidebar header
+    const pages = window.AtlasAI.allPages || [];
+    const currentUserEmail = window.AtlasAI.currentUserEmail || '';
     const sidebarHeader = document.querySelector(".sidebar-header")
-    if (sidebarHeader) {
-      const createBtn = document.createElement("button")
-      createBtn.className = "create-page-btn"
-      createBtn.innerHTML = '<i class="fas fa-plus"></i>'
-      createBtn.title = "Create new page"
-      createBtn.addEventListener("click", (e) => {
-        e.preventDefault(); // Prevent any default button action
-        e.stopPropagation(); // Prevent propagation that might instantly close the modal
-        // Use a global event to trigger the modal, so modal.js can handle it
-        // CHANGED: Directly call window.showCreatePageModal
-        if (window.showCreatePageModal) {
-            window.showCreatePageModal();
-        }
-      })
+    const hasEditPermission = document.getElementById("mainContent").dataset.canEdit === 'True';
 
-      sidebarHeader.appendChild(createBtn)
+    function findPageBySlug(slug) {
+        return pages.find(p => p.slug === slug);
     }
 
-    // This global function allows the welcome screen button to open the modal
-    window.showCreatePageModalFromSidebar = (parentId = null, parentTitle = null) => {
+    if (!hasEditPermission) {
+      // If no permission, do not add the menu button at all
+      return;
+    }
+    if (sidebarHeader && !sidebarHeader.querySelector('.create-page-btn')) {
+        const createBtn = document.createElement("button");
+        createBtn.className = "create-page-btn";
+        createBtn.innerHTML = '<i class="fas fa-plus"></i>';
+        createBtn.title = "Create new page";
+        createBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (window.showCreatePageModal) {
+                window.showCreatePageModal();
+            }
+        });
+        sidebarHeader.appendChild(createBtn);
+    }
+
+
+   window.showCreatePageModalFromSidebar = (parentId = null, parentTitle = null) => {
         if (window.showCreatePageModal) {
             window.showCreatePageModal(parentId, parentTitle);
         }
     };
 
 
-    document.querySelectorAll(".page-item").forEach((pageItem) => {
-      const pageLink = pageItem.querySelector(".page-link") 
-      if (!pageLink) return
+     document.querySelectorAll(".page-item").forEach((pageItem) => {
+        const pageLink = pageItem.querySelector(".page-link");
+        if (!pageLink) return;
 
-      // Create menu button
-      const menuBtn = document.createElement("button")
-      menuBtn.className = "page-menu-btn"
-      menuBtn.innerHTML = '<i class="fas fa-ellipsis-h"></i>'
-      menuBtn.title = "Page options"
+        const pageSlug = pageLink.href.split("/").pop();
+        const pageData = findPageBySlug(pageSlug);
 
-      // Create menu dropdown
-      const menu = document.createElement("div")
-      menu.className = "page-menu"
+        // Check if the current user has edit permission for THIS specific page
+        const hasEditPermission = pageData && (pageData.creator_email === currentUserEmail || (pageData.editor_emails && pageData.editor_emails.includes(currentUserEmail)));
 
-      const pageSlug = pageLink.href.split("/").pop()
-      // Get page title from the span inside page-link-content
-      const pageTitle = pageLink.querySelector(".page-link-content span") ? pageLink.querySelector(".page-link-content span").textContent : '';
+        // If the user has edit permission for this page, add the menu button
+        if (hasEditPermission) {
+            // Create menu button
+            const menuBtn = document.createElement("button");
+            menuBtn.className = "page-menu-btn";
+            menuBtn.innerHTML = '<i class="fas fa-ellipsis-h"></i>';
+            menuBtn.title = "Page options";
 
+            // Create menu dropdown
+            const menu = document.createElement("div");
+            menu.className = "page-menu";
 
-      menu.innerHTML = `
-        <button class="menu-item" data-action="addChildPage">
-          <i class="fas fa-plus"></i>
-          <span>Add child page</span>
-        </button>
-        <button class="menu-item delete" data-action="deletePage">
-          <i class="fas fa-trash"></i>
-          <span>Delete page</span>
-        </button>
-      `
-      // Append menu button and menu to pageLink
-      pageLink.appendChild(menuBtn)
-      pageLink.appendChild(menu) // Ensure menu is child of pageLink for positioning
+            // Get page title from the span inside page-link-content
+            const pageTitle = pageLink.querySelector(".page-link-content span") ? pageLink.querySelector(".page-link-content span").textContent : '';
+
+            menu.innerHTML = `
+                <button class="menu-item" data-action="addChildPage">
+                  <i class="fas fa-plus"></i>
+                  <span>Add child page</span>
+                </button>
+                <button class="menu-item" data-action="editPermissions">
+                  <i class="fas fa-user-shield"></i>
+                  <span>Edit Permissions</span>
+                </button>
+                <button class="menu-item delete" data-action="deletePage">
+                  <i class="fas fa-trash"></i>
+                  <span>Delete page</span>
+                </button>
+            `;
+            // Append menu button and menu to pageLink
+            pageLink.appendChild(menuBtn);
+            pageLink.appendChild(menu);
 
 
 // Enhanced menu management with pointer-events control
@@ -280,23 +299,22 @@ document.addEventListener("click", (e) => {
 
 // Ensure menu items are properly clickable
 menu.querySelectorAll(".menu-item").forEach(item => {
-  item.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    // Force the click to be processed
-    setTimeout(() => {
-      const action = item.dataset.action;
-      if (action === "addChildPage") {
-        window.addChildPage(pageSlug, pageTitle);
-      } else if (action === "deletePage") {
-        window.deletePage(pageSlug);
-      }
-    }, 0);
-  });
-});
-    })
-  }
+                item.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const action = item.dataset.action;
+                    if (action === "addChildPage") {
+                        window.addChildPage(pageSlug, pageTitle);
+                    } else if (action === "deletePage") {
+                        window.deletePage(pageSlug);
+                    } else if (action === "editPermissions") {
+                        window.showEditPermissionsModal(pageSlug);
+                    }
+                });
+            });
+        }
+    });
+}
 
   // Add sidebar collapsible functionality with smooth animations
   function setupSidebarCollapse() {
